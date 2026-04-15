@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Xiaohongshu Image Replicator",
+  "version": "0.1.0",
+  "description": "Hover over Xiaohongshu images to replicate them with your own image model.",
+  "permissions": [
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://www.xiaohongshu.com/*",
+    "https://xhslink.com/*",
+    "https://edith.xiaohongshu.com/*",
+    "https://*.xhscdn.com/*",
+    "https://www.pinterest.com/*",
+    "https://*.pinimg.com/*",
+    "https://www.taobao.com/*",
+    "https://item.taobao.com/*",
+    "https://*.alicdn.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.xiaohongshu.com/*",
+        "https://edith.xiaohongshu.com/*",
+        "https://www.pinterest.com/*",
+        "https://www.taobao.com/*",
+        "https://item.taobao.com/*"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "src/options.html",
+  "action": {
+    "default_title": "小红书图片复刻"
+  }
+}

@@ -1,0 +1,154 @@
+:root {
+  color-scheme: light;
+  --bg: #f5efe6;
+  --bg-strong: #fffaf4;
+  --card: rgba(255, 255, 255, 0.88);
+  --line: rgba(29, 31, 36, 0.12);
+  --text: #1e1d22;
+  --muted: #615c66;
+  --accent: #ff5b2e;
+  --accent-deep: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(255, 91, 46, 0.22), transparent 20%),
+    radial-gradient(circle at bottom right, rgba(255, 36, 66, 0.14), transparent 18%),
+    var(--bg);
+}
+
+.page {
+  width: min(900px, calc(100% - 32px));
+  margin: 48px auto;
+}
+
+.hero {
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(32px, 5vw, 48px);
+  line-height: 1;
+}
+
+.intro {
+  max-width: 680px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.card {
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--card);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 24px 60px rgba(20, 16, 22, 0.08);
+}
+
+form {
+  display: grid;
+  gap: 18px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+}
+
+span {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-strong);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus {
+  border-color: rgba(255, 91, 46, 0.5);
+  box-shadow: 0 0 0 4px rgba(255, 91, 46, 0.12);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+button,
+a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+button {
+  border: 0;
+  background: var(--accent-deep);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+a {
+  color: var(--accent-deep);
+  background: #ece8e1;
+}
+
+.status {
+  min-height: 24px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.status[data-state="success"] {
+  color: #0f766e;
+}
+
+.status[data-state="error"] {
+  color: #b42318;
+}
