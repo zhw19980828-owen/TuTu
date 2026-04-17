@@ -86,44 +86,54 @@
         <div class="xhs-replicator-panel">
           <section class="xhs-replicator-preview">
             <div class="xhs-replicator-preview-inner">
-              <h2 class="xhs-replicator-title">电商商拍复刻</h2>
-              <p class="xhs-replicator-subtitle">参考图负责场景和氛围，商品图负责主体。适合服饰、首饰、箱包、美妆、家居等电商素材生成。</p>
-              <img alt="参考图预览" />
+              <div class="xhs-replicator-preview-card">
+                <img alt="参考图预览" />
+              </div>
             </div>
           </section>
           <section class="xhs-replicator-form">
-            <div class="xhs-replicator-row">
-              <label for="xhs-replicator-source">参考图地址</label>
-              <input id="xhs-replicator-source" type="text" readonly />
-            </div>
-            <div class="xhs-replicator-row">
-              <label for="xhs-replicator-product">上传商品图</label>
-              <input id="xhs-replicator-product" type="file" accept="image/*" />
-              <div class="xhs-replicator-upload-hint" data-role="product-name">未选择商品图片</div>
-            </div>
-            <div class="xhs-replicator-row">
-              <label for="xhs-replicator-subject">商品主体说明（可选）</label>
-              <input id="xhs-replicator-subject" type="text" placeholder="例如：女装连衣裙、银色戒指、玻璃香水瓶。白底商品图不写也可以。" />
-            </div>
-            <div class="xhs-replicator-row">
-              <label for="xhs-replicator-notes">补充要求</label>
-              <textarea id="xhs-replicator-notes" placeholder="可选：比如更适合首页头图、突出面料、突出光泽、保留模特上身效果、改成静物陈列等"></textarea>
-            </div>
-            <div class="xhs-replicator-row">
-              <label for="xhs-replicator-ratio">画面比例</label>
-              <select id="xhs-replicator-ratio">
-                <option value="follow">跟随原图比例</option>
-                <option value="4:3">4:3</option>
-                <option value="3:4">3:4</option>
-                <option value="16:9">16:9</option>
-                <option value="9:16">9:16</option>
-                <option value="1:1">1:1</option>
-                <option value="2.35:1">2.35:1</option>
-              </select>
-            </div>
-            <div class="xhs-replicator-actions">
-              <button class="xhs-replicator-button" data-variant="primary" data-role="generate">上传商品后生成</button>
-              <button class="xhs-replicator-button" data-variant="secondary" data-role="settings">打开设置</button>
+            <div class="xhs-replicator-form-card">
+              <div class="xhs-replicator-row">
+                <input id="xhs-replicator-product" class="xhs-replicator-product-input" type="file" accept="image/*" />
+                <div class="xhs-replicator-upload-card" data-role="upload-card" tabindex="0">
+                  <div class="xhs-replicator-upload-plus">+</div>
+                  <div class="xhs-replicator-upload-copy">
+                    <div class="xhs-replicator-upload-title">上传商品图</div>
+                    <div class="xhs-replicator-upload-subtitle">点击添加你的商品主体</div>
+                  </div>
+                </div>
+                <div class="xhs-replicator-product-chip" data-role="product-chip" hidden>
+                  <img class="xhs-replicator-product-thumb" data-role="product-thumb" alt="商品缩略图" />
+                  <div class="xhs-replicator-product-actions">
+                    <button class="xhs-replicator-inline-action" type="button" data-role="replace-product">替换</button>
+                    <button class="xhs-replicator-inline-action" type="button" data-role="remove-product">删除</button>
+                  </div>
+                </div>
+              </div>
+              <div class="xhs-replicator-row">
+                <label for="xhs-replicator-subject">商品主体说明（可选）</label>
+                <input id="xhs-replicator-subject" type="text" placeholder="例如：女装连衣裙、银色戒指、玻璃香水瓶。白底商品图不写也可以。" />
+              </div>
+              <div class="xhs-replicator-row">
+                <label for="xhs-replicator-notes">补充要求</label>
+                <input id="xhs-replicator-notes" type="text" placeholder="可选：比如更适合首页头图、突出面料、突出光泽、保留模特上身效果、改成静物陈列等" />
+              </div>
+              <div class="xhs-replicator-row">
+                <label for="xhs-replicator-ratio">画面比例</label>
+                <select id="xhs-replicator-ratio">
+                  <option value="follow">跟随原图比例</option>
+                  <option value="4:3">4:3</option>
+                  <option value="3:4">3:4</option>
+                  <option value="16:9">16:9</option>
+                  <option value="9:16">9:16</option>
+                  <option value="1:1">1:1</option>
+                  <option value="2.35:1">2.35:1</option>
+                </select>
+              </div>
+              <div class="xhs-replicator-actions">
+                <button class="xhs-replicator-button" data-variant="primary" data-role="generate">上传商品后生成</button>
+                <button class="xhs-replicator-button" data-variant="secondary" data-role="settings">打开设置</button>
+              </div>
             </div>
             <div class="xhs-replicator-status"></div>
             <div class="xhs-replicator-progress" hidden>
@@ -133,15 +143,17 @@
               </div>
             </div>
             <div class="xhs-replicator-result" hidden>
-              <div class="xhs-replicator-result-header">
-                <strong>生成结果</strong>
-                <button class="xhs-replicator-button" data-variant="secondary" data-role="download">下载图片</button>
+              <div class="xhs-replicator-result-card">
+                <div class="xhs-replicator-result-header">
+                  <div class="xhs-replicator-result-title">生成结果</div>
+                  <button class="xhs-replicator-button" data-variant="secondary" data-role="download">下载图片</button>
+                </div>
+                <details class="xhs-replicator-debug">
+                  <summary>查看最终生图 Prompt</summary>
+                  <pre class="xhs-replicator-debug-text"></pre>
+                </details>
+                <img alt="复刻结果" />
               </div>
-              <details class="xhs-replicator-debug">
-                <summary>查看最终生图 Prompt</summary>
-                <pre class="xhs-replicator-debug-text"></pre>
-              </details>
-              <img alt="复刻结果" />
             </div>
           </section>
         </div>
@@ -149,12 +161,13 @@
     `;
 
     const previewImage = mask.querySelector(".xhs-replicator-preview img");
-    const sourceInput = mask.querySelector("#xhs-replicator-source");
     const productInput = mask.querySelector("#xhs-replicator-product");
+    const uploadCard = mask.querySelector('[data-role="upload-card"]');
+    const productChip = mask.querySelector('[data-role="product-chip"]');
+    const productThumb = mask.querySelector('[data-role="product-thumb"]');
     const subjectInput = mask.querySelector("#xhs-replicator-subject");
     const notesInput = mask.querySelector("#xhs-replicator-notes");
     const ratioInput = mask.querySelector("#xhs-replicator-ratio");
-    const productName = mask.querySelector('[data-role="product-name"]');
     const status = mask.querySelector(".xhs-replicator-status");
     const progressWrap = mask.querySelector(".xhs-replicator-progress");
     const progressLabel = mask.querySelector(".xhs-replicator-progress-label");
@@ -164,6 +177,8 @@
     const resultImage = mask.querySelector(".xhs-replicator-result img");
     const generateButton = mask.querySelector('[data-role="generate"]');
     const formSection = mask.querySelector(".xhs-replicator-form");
+    const replaceProductButton = mask.querySelector('[data-role="replace-product"]');
+    const removeProductButton = mask.querySelector('[data-role="remove-product"]');
 
     mask.addEventListener("click", (event) => {
       if (event.target === mask) {
@@ -194,26 +209,55 @@
       status.textContent = response?.ok
         ? "已打开下载面板。"
         : `下载失败：${response?.error || "未知错误"}`;
+      });
+
+    uploadCard.addEventListener("click", () => {
+      productInput.click();
+    });
+    uploadCard.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        productInput.click();
+      }
+    });
+    replaceProductButton.addEventListener("click", () => {
+      productInput.click();
+    });
+    removeProductButton.addEventListener("click", () => {
+      clearProductSelection({
+        productInput,
+        productThumb,
+        uploadCard,
+        productChip
+      });
     });
 
     productInput.addEventListener("change", async () => {
       const file = productInput.files?.[0];
       if (!file) {
-        state.productImageDataUrl = "";
-        state.productFileName = "";
-        productName.textContent = "未选择商品图片";
+        clearProductSelection({
+          productInput,
+          productThumb,
+          uploadCard,
+          productChip
+        });
         return;
       }
 
       try {
         state.productImageDataUrl = await readFileAsDataUrl(file);
         state.productFileName = file.name;
-        productName.textContent = `已选择：${file.name}`;
+        productThumb.src = state.productImageDataUrl;
+        uploadCard.hidden = true;
+        productChip.hidden = false;
         status.textContent = "";
       } catch (error) {
-        state.productImageDataUrl = "";
-        state.productFileName = "";
-        productName.textContent = "商品图片读取失败";
+        clearProductSelection({
+          productInput,
+          productThumb,
+          uploadCard,
+          productChip
+        });
         status.textContent = `商品图片读取失败：${error instanceof Error ? error.message : String(error)}`;
       }
     });
@@ -253,7 +297,8 @@
         resultImage.src = state.generatedImageUrl;
         resultWrap.hidden = false;
         finishProgress(progressLabel, progressFill);
-        status.textContent = "生成完成，可以直接预览或下载。";
+        progressWrap.hidden = true;
+        status.textContent = "";
         requestAnimationFrame(() => {
           scrollResultIntoView(formSection, resultWrap);
         });
@@ -270,12 +315,13 @@
     return {
       mask,
       previewImage,
-      sourceInput,
       productInput,
+      uploadCard,
+      productChip,
+      productThumb,
       subjectInput,
       notesInput,
       ratioInput,
-      productName,
       status,
       progressWrap,
       progressLabel,
@@ -292,16 +338,17 @@
       return;
     }
     modal.previewImage.src = state.currentImageUrl;
-    modal.sourceInput.value = state.currentImageUrl;
-    modal.productInput.value = "";
     modal.subjectInput.value = "";
     modal.notesInput.value = "";
     modal.ratioInput.value = "follow";
-    modal.productName.textContent = state.productFileName
-      ? `已选择：${state.productFileName}`
-      : "未选择商品图片";
     modal.status.textContent = "";
     stopProgress(modal.progressWrap, modal.progressLabel, modal.progressFill);
+    clearProductSelection({
+      productInput: modal.productInput,
+      productThumb: modal.productThumb,
+      uploadCard: modal.uploadCard,
+      productChip: modal.productChip
+    });
     modal.resultWrap.hidden = true;
     modal.debugText.textContent = "";
     modal.resultImage.removeAttribute("src");
@@ -336,6 +383,23 @@
       top: targetTop,
       behavior: "smooth"
     });
+  }
+
+  function clearProductSelection({ productInput, productThumb, uploadCard, productChip }) {
+    state.productImageDataUrl = "";
+    state.productFileName = "";
+    if (productInput) {
+      productInput.value = "";
+    }
+    if (productThumb) {
+      productThumb.removeAttribute("src");
+    }
+    if (uploadCard) {
+      uploadCard.hidden = false;
+    }
+    if (productChip) {
+      productChip.hidden = true;
+    }
   }
 
   function scheduleHideTrigger() {
