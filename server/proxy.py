@@ -15,8 +15,9 @@ PROXY_TOKEN = os.environ.get("PROXY_TOKEN", "")
 DEFAULTS = {
     "model": "doubao-seedream-4-5-251128",
     "visionModel": "doubao-seed-1-6-251015",
-    "visionSystemPrompt": "## 一、角色定义\n\n你是一位专业的电商视觉复刻专家。用户会提供参考图（场景、氛围、姿态、构图来源）和商品图（需要展示的商品）。商品图会作为垫图直接输入绘图模型，因此你的文字 Prompt 不需要详细描述商品的视觉细节（颜色、花纹、材质等由图像通道传递）。\n\n你的任务是输出一段高精度的中文图像生成 Prompt，核心职责是：\n1. 精确还原参考图的画面框架（拍摄方式、场景、光影、色彩、姿态、构图）\n2. 指明商品在画面中的位置和融入方式\n3. 补充图像通道容易丢失的关键信息（品牌文字、极易丢失的设计特征）\n\n商品可能是任何品类，包括但不限于：服装、鞋靴、箱包、配饰、数码产品、美妆护肤、家居、食品饮品等。\n\n## 二、输入说明\n\n用户会提供图片，存在以下情况：\n- 两张图：一张参考图 + 一张商品图。参考图提取画面框架，商品图标注品类和融入方式。\n- 一张图：既是参考图也是商品图。从同一张图中提取所有信息。\n- 多张图：一张参考图 + 多张商品图（不同角度）。综合所有商品图，统一标注。\n\n如果用户未明确标注哪张是参考图、哪张是商品图，根据图片内容自行判断。\n\n## 三、参考图分析要求（必须覆盖）\n\n你必须从参考图中识别并记录以下维度：\n拍摄方式、机位高度、镜头焦段感受、画幅方向、景别或取景范围、影像风格调性、画面精修程度、场景地点、背景环境、环境整洁程度与生活气息、地面或桌面材质、景深关系、时间段、主光源方向、光线质感、色温倾向、曝光风格、整体色彩氛围、阴影特征、身体朝向、头部朝向与倾斜、视线方向、表情、左手动作、右手动作、腿部姿态、重心与体态、发型、发色、肤色、妆容特征、保留的非商品服装、鞋子、其他配饰、主体位置、主体占画面比例、头顶留白、底部裁切、前景元素、文字水印标识。\n\n其中你必须把以下信息描述得足够具体，不能泛泛而谈：\n- 主体在画面中的占比，例如人物约占画面 55%-65%\n- 镜头角度，例如正面、左前 3/4、右前 3/4、平视、轻微俯拍、轻微仰拍\n- 主体与背景之间的光影关系，例如主体是否比背景更亮、背景地面高光是否更强、轮廓光来自哪里\n\n## 四、商品图分析要求\n\n由于商品图会作为垫图输入绘图模型，视觉细节主要由图像通道传递。文字分析只需完成以下三项：\n1. 品类与融入定位：一句话说清楚商品是什么、如何融入、替换参考图中的哪个元素。\n2. 品牌文字与 Logo：逐字照录所有可见品牌名称、标语、型号等文字，并标注位置、大小关系、字体风格、颜色。如无可见文字，写“无可见文字”。\n3. 最易丢失的关键特征：最多列 3 条，仅列图像通道可能传递不好的特征，如不对称设计、特殊结构、小面积装饰、特殊工艺等。若无则写“无特殊易丢特征”。\n\n## 五、商品融入规则\n\n只替换商品对应位置的元素，其他所有视觉元素必须保留。\n- 穿着替换：适用于服装和鞋靴，替换参考图中对应位置服装或鞋子。\n- 佩戴替换：适用于配饰、手表、眼镜、帽子，替换或添加到人物对应位置。\n- 手持或使用：适用于手机、包、杯子、相机等，替换或添加到手中，必要时微调手部姿态。\n- 场景摆放：适用于家居、摆件、食品等，替换场景中对应位置物品。\n- 主体替换：适用于参考图主体本身就是同类商品。\n\n## 六、最终 Prompt 输出规则\n\n最终 Prompt 必须是一整段连续中文描述，结构顺序为：拍摄方式与画面框架 → 场景环境（含承载面）→ 光影与色彩氛围 → 人物整体描述（如有）→ 商品融入描述（简洁点明品类、位置和关键特征）→ 保留的非商品穿着物或配饰（详细描述）→ 姿态与手部细节 → 构图与画面结构 → 影像风格调性。\n\n语言要求：\n- 只输出一整段连续中文，不要 Markdown，不要编号，不要分行。\n- 不要输出解释、分析过程、标题、JSON。\n- 不要使用泛化修饰语，例如“画面干净高级”“主体突出”“适合电商投放”“高清主视觉图”“商品细节清晰”等。\n- 每一句都必须是具体视觉描述。\n\n忠实还原要求：\n- 不得添加参考图中不存在的元素。\n- 不得删除参考图中存在的元素，包括杂物、生活痕迹、文字、水印、镜框边缘等。\n- 不得擅自改变拍摄方式、色温、曝光风格、景深关系、环境整洁度。\n- 不得把夜景改成白天，不得把暖调改成冷调，不得把镜面自拍改成直拍。\n- 不得擅自改变主体在画面中的大小、裁切方式、镜头角度、人物数量、人物性别、动作姿态。\n\n商品描述轻重原则：\n- 商品本身只写品类名称、融入位置、品牌文字、最易丢失特征，不要详细描述颜色、花纹、材质等图像通道能传递的信息。\n- 保留的非商品元素必须详细描述，因为这些没有垫图传递。\n\n## 七、输出目标\n\n请先在内部完成参考图分析、商品图分析和融入判断，但最终只输出一整段最终生成 Prompt 本身，不要显示分析过程，不要显示小标题，不要显示“参考图分析”“商品图分析”“融入方式说明”等字样。",
-    "promptTemplate": "你现在要生成一张电商营销图，并且必须高度遵循参考图的视觉骨架。用户上传的商品图既是商品信息来源，也是主体一致性的强参考输入，生成时必须尽量保持商品图中的款式、材质、颜色、图案、结构、轮廓和关键细节一致。必须优先保留参考图里的时间段、场景地点、背景环境、明暗关系、色彩氛围、画幅比例、镜头远近、镜头角度、机位角度、景别、主体在画面中的精确占比、人物是否出镜、人物数量、人物呈现性别、年龄感、发型长度、动作姿态、手部位置、视线方向、裁切方式和大致构图，只把原图中的展示主体替换成用户上传的商品。必须尽量保持和参考图一致的纵横比例、取景范围和主体大小，不要擅自把主体拍得更近或更远，不要把半身改成特写，也不要把原本占比较小的主体放大成满屏。输出时请把主体占比描述得更细，例如人物约占画面 55%-65%、头顶留白多少、肩部和腰部裁切在哪里；请把镜头角度描述得更细，例如平视、轻微俯拍、轻微仰拍、正面、左前 3/4 侧、右前 3/4 侧。若参考图中是单个女性模特，就继续保持单个女性模特；若是单个男性模特，就继续保持单个男性模特；不要擅自改性别、改人数、改出镜方式。若商品属于服饰类，必须把商品穿在模特对应部位，尽量保持原姿态、原机位、原裁切和原氛围，只替换衣服本身；若参考图是静物特写，就继续保留静物特写和布景逻辑。商品必须成为视觉中心，并忠实体现商品图里的款式、材质、颜色、轮廓和关键细节。不要擅自改成白天或晴天，不要擅自改变动作和机位，不要替换成完全不同的背景。附加要求：{userPrompt}",
+    "nonApparelPrompt": "你是一位电商静物与非服饰商品复刻提示词专家。你会看到一张参考图和一张商品图。参考图只负责提供场景模板，你必须准确继承参考图里的拍摄方式、画幅比例、镜头角度、景别、主体占比、场景地点、背景元素、承载面材质、时间段、光线方向、光线质感、色温、曝光、色彩氛围、景深关系、主体与背景的光影关系，以及画面里原本存在的真实生活痕迹。商品图只负责告诉你最终要替换进去的商品主体是什么。因为商品图会在后续生成阶段作为参考图输入，所以你不需要重复描述商品的大面积颜色、基础材质和大轮廓，只需要在容易丢失时补充品牌文字、logo 位置、特殊结构、小面积装饰、异形轮廓、特殊开合方式等高辨识度信息。你的任务是输出一整段最终给生图模型使用的中文 prompt，要求只替换参考图里的主体商品或摆件，不改变参考图的场景骨架、机位、取景范围、主体大小、裁切方式和光影关系，不要擅自添加参考图里没有的新道具，不要输出解释、标题、分点或 JSON。",
+    "apparelPortraitPrompt": "你是一位电商服饰模特设定提示词专家。你会看到一张参考图，这张图只用来生成一张新的模特人像垫图，后续再把用户的服饰商品替换上去。你的任务是只根据参考图输出一整段中文生图 prompt，用于先生成一张与参考图人物气质、性别、年龄感、脸型、发型长度、发色、妆容浓度、视线方向、头部倾斜、身体朝向、动作姿态、镜头角度、景别、主体占比、裁切方式、场景地点、时间段、背景布局、色彩氛围、光影关系都尽量相似的模特人像图片。你必须保留参考图的人像出镜形式和构图骨架，但要让模特穿着尽量简洁、干净、贴身、低干扰的基础内搭或无明显设计感的占位服装，避免外套、复杂印花、大面积文字、夸张配饰和抢主体的服装细节，以便后续服饰替换。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
+    "apparelFinalPrompt": "你是一位电商服饰换装复刻提示词专家。你会看到参考图、生成的人像垫图和用户的商品图。参考图只负责提供场景模板，你必须继承参考图里的时间段、天气、场景地点、背景布局、机位、镜头角度、景别、主体占比、裁切方式、人物姿态、手部位置、视线方向、光影关系和整体营销氛围。生成的人像垫图是最终模特基础，你必须尽量保留它的人脸、发型、体态、肢体关系和取景裁切。商品图只负责提供要替换上身的服饰主体，商品图会在后续生成阶段作为参考图输入，因此你不需要冗长描述基础颜色和大体轮廓，只需要在容易丢失时补充品牌文字、logo、领口结构、袖型、纽扣排布、特殊拼接、不对称设计、特殊面料工艺等关键特征。你的任务是输出一整段最终给生图模型使用的中文 prompt，要求把商品服饰自然穿在模特对应部位，保持参考图的构图骨架和动作，不要擅自改性别、改人数、改景别、改主体大小，也不要把服饰替换成完全不同的穿法。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
     "defaultUserPrompt": "输出适合电商投放和商品详情页的高清主视觉，主体明确，商品细节清晰，画面干净高级。",
     "imageSize": "2K",
     "responseDataPath": "data[0].url",
@@ -27,6 +28,22 @@ DEFAULTS = {
         "watermark": True,
     },
 }
+
+PRODUCT_KIND_PROMPT = (
+    "你是一位电商商品路径分类助手。你会看到一张商品图，只需要判断这张图的主要商品更适合走“服饰”还是“非服饰”生成链路。"
+    "服饰包括上衣、裤子、裙子、外套、内衣、鞋靴、帽子等穿在人体上的商品；"
+    "非服饰包括戒指、项链、耳饰、手表、箱包、美妆、家居、数码、食品、摆件等。"
+    "只输出一个 JSON，对象里必须包含 productKind 和 reason 两个字段。"
+    "productKind 只能是 apparel 或 non_apparel。"
+)
+
+REFERENCE_FACE_PROMPT = (
+    "你是一位电商参考图结构识别助手。你会看到一张参考图，只需要判断参考图里是否存在清晰、足够大、可用于后续服饰复刻的人脸。"
+    "只有当画面中出现真人面部，并且脸部不是过小、不是严重遮挡、不是背脸、不是极端模糊、不是插画或雕塑、五官至少大部分可辨认时，才可以判定为 true。"
+    "如果只是有人体但看不清脸，或者脸太小、侧背严重、戴口罩遮住大部分五官、被头发或道具遮挡、只是海报或印花上的脸，都必须判定为 false。"
+    "请只输出一个 JSON，对象里必须包含 hasFace 和 reason 两个字段。"
+    "hasFace 只能是 true 或 false。"
+)
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
@@ -43,15 +60,21 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            if self.path != "/replicate":
-                self._send_json(404, {"error": "Not found"})
-                return
-
             self._authorize()
             self._assert_ark_key()
             body = self._read_json_body()
-            result = replicate(body)
-            self._send_json(200, result)
+
+            if self.path == "/replicate":
+                result = replicate(body)
+                self._send_json(200, result)
+                return
+
+            if self.path == "/classify-product":
+                result = classify_product_endpoint(body)
+                self._send_json(200, result)
+                return
+
+            self._send_json(404, {"error": "Not found"})
         except Exception as error:
             status = getattr(error, "status_code", 500)
             self._send_json(status, {"error": str(error)})
@@ -100,10 +123,22 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 
 
+def classify_product_endpoint(body):
+    product_image_data_url = body.get("productImageDataUrl", "")
+    if not product_image_data_url:
+        error = Exception("productImageDataUrl is required.")
+        error.status_code = 400
+        raise error
+
+    settings = build_settings(body)
+    product_data_url = normalize_data_url(product_image_data_url)
+    product_kind, reason = classify_product_kind(product_data_url, settings)
+    return {"productKind": product_kind, "reason": reason}
+
+
 def replicate(body):
     image_url = body.get("imageUrl", "")
     product_image_data_url = body.get("productImageDataUrl", "")
-    product_subject_hint = body.get("productSubjectHint", "")
     if not image_url:
         error = Exception("imageUrl is required.")
         error.status_code = 400
@@ -113,93 +148,256 @@ def replicate(body):
         error.status_code = 400
         raise error
 
-    settings = {
+    settings = build_settings(body)
+    reference_data_url = convert_image_url_to_data_url(image_url)
+    product_data_url = normalize_data_url(product_image_data_url)
+
+    generation_path = normalize_generation_path(body.get("generationPath"))
+    if not generation_path:
+        generation_path, _ = classify_product_kind(product_data_url, settings)
+
+    if generation_path == "apparel":
+        return replicate_apparel(reference_data_url, product_data_url, settings, generation_path)
+    return replicate_non_apparel(reference_data_url, product_data_url, settings, generation_path)
+
+
+def build_settings(body):
+    return {
         "model": body.get("model") or DEFAULTS["model"],
         "visionModel": body.get("visionModel") or DEFAULTS["visionModel"],
-        "visionSystemPrompt": body.get("visionSystemPrompt")
-        or DEFAULTS["visionSystemPrompt"],
-        "promptTemplate": body.get("promptTemplate") or DEFAULTS["promptTemplate"],
-        "defaultUserPrompt": body.get("defaultUserPrompt")
-        or DEFAULTS["defaultUserPrompt"],
+        "nonApparelPrompt": body.get("nonApparelPrompt") or DEFAULTS["nonApparelPrompt"],
+        "apparelPortraitPrompt": body.get("apparelPortraitPrompt")
+        or DEFAULTS["apparelPortraitPrompt"],
+        "apparelFinalPrompt": body.get("apparelFinalPrompt") or DEFAULTS["apparelFinalPrompt"],
+        "defaultUserPrompt": body.get("defaultUserPrompt") or DEFAULTS["defaultUserPrompt"],
         "imageSize": body.get("imageSize") or DEFAULTS["imageSize"],
-        "responseDataPath": body.get("responseDataPath")
-        or DEFAULTS["responseDataPath"],
+        "responseDataPath": body.get("responseDataPath") or DEFAULTS["responseDataPath"],
         "extraBody": body.get("extraBody")
         if isinstance(body.get("extraBody"), dict)
         else DEFAULTS["extraBody"],
         "userPrompt": body.get("userPrompt") or DEFAULTS["defaultUserPrompt"],
-        "productSubjectHint": product_subject_hint.strip(),
-        "productReferenceImage": product_image_data_url,
+        "productSubjectHint": (body.get("productSubjectHint") or "").strip(),
     }
 
-    reference_data_url = convert_image_url_to_data_url(image_url)
-    product_data_url = normalize_data_url(product_image_data_url)
-    prompt = compose_final_prompt(reference_data_url, product_data_url, settings)
-    result_image_url = generate_image(prompt, settings)
 
+def replicate_non_apparel(reference_data_url, product_data_url, settings, generation_path):
+    prompt = compose_non_apparel_prompt(reference_data_url, product_data_url, settings)
+    result_image_url = generate_image(prompt, settings, [product_data_url])
     return {
         "imageUrl": result_image_url,
         "referenceAnalysisPrompt": "",
         "productAnalysisPrompt": "",
         "analysisPrompt": "",
         "prompt": prompt,
+        "portraitPrompt": "",
+        "portraitImageUrl": "",
+        "referenceHasFace": False,
+        "generationPath": generation_path,
     }
 
 
-def compose_final_prompt(reference_data_url, product_data_url, settings):
-    subject_hint = settings.get("productSubjectHint", "")
-    hint_text = (
-        f"用户补充说明商品主体是：{subject_hint}。请在识别商品主体时优先参考这条说明。"
-        if subject_hint
-        else "如果商品图里有干扰元素，请自行判断真正商品主体。"
-    )
+def replicate_apparel(reference_data_url, product_data_url, settings, generation_path):
+    reference_has_face, face_reason = detect_reference_face(reference_data_url, settings)
+    portrait_prompt = ""
+    portrait_image_url = ""
 
-    user_prompt = settings.get("userPrompt", "").strip() or DEFAULTS["defaultUserPrompt"]
-    payload = {
-        "model": settings["visionModel"],
-        "instructions": settings["visionSystemPrompt"],
-        "input": [
+    if reference_has_face:
+        portrait_prompt = compose_apparel_portrait_prompt(reference_data_url, settings)
+        portrait_image_url = generate_image(portrait_prompt, settings, [])
+
+    final_prompt = compose_apparel_final_prompt(
+        reference_data_url,
+        product_data_url,
+        portrait_image_url,
+        reference_has_face,
+        settings,
+    )
+    reference_images = [product_data_url]
+    if portrait_image_url:
+        reference_images = [portrait_image_url, product_data_url]
+
+    result_image_url = generate_image(final_prompt, settings, reference_images)
+    return {
+        "imageUrl": result_image_url,
+        "referenceAnalysisPrompt": "",
+        "productAnalysisPrompt": "",
+        "analysisPrompt": "",
+        "prompt": final_prompt,
+        "portraitPrompt": portrait_prompt,
+        "portraitImageUrl": portrait_image_url,
+        "referenceHasFace": reference_has_face,
+        "referenceFaceReason": face_reason,
+        "generationPath": generation_path,
+    }
+
+
+def classify_product_kind(product_data_url, settings):
+    text = call_vision_model(
+        model=settings["visionModel"],
+        instructions=PRODUCT_KIND_PROMPT,
+        content=[
+            {"type": "input_image", "image_url": product_data_url},
             {
-                "role": "user",
-                "content": [
-                    {"type": "input_image", "image_url": reference_data_url},
-                    {"type": "input_image", "image_url": product_data_url},
-                    {
-                        "type": "input_text",
-                        "text": (
-                            "第一张图是参考图，只负责提供场景、时间、背景、构图、机位、动作、主体占比、光影关系和整体氛围；"
-                            "第二张图是用户上传的商品图，既负责告诉你商品主体是什么，也会在后续生成阶段作为主体一致性的强参考输入。"
-                            "你的任务不是分开分析，而是直接输出一段最终可用于生图模型的中文 prompt。"
-                            "这段 prompt 必须尽量保持参考图的时间段、场景地点、背景环境、光影关系、画幅比例、镜头远近、机位角度、景别、主体在画面中的占比、人物是否出镜、人物数量、人物呈现性别、动作姿态、手部位置、视线方向、裁切方式和大致构图；"
-                            "同时把原图主体替换成商品图对应的商品，并忠实保留商品图里的款式、材质、颜色、图案、结构、轮廓和关键细节。"
-                            "如果参考图是人物场景且商品属于服饰类，必须保持类似的人物出镜形式和动作，把商品穿在对应部位；"
-                            "如果参考图是静物特写，就保留静物布景逻辑，只替换主体商品。"
-                            "不要输出解释，不要分点，不要加标题，只输出一整段最终 prompt。"
-                            f"{hint_text}"
-                            f"用户额外补充要求：{user_prompt}"
-                        ),
-                    },
-                ],
-            }
+                "type": "input_text",
+                "text": "请判断这张商品图的主要商品应该走服饰还是非服饰路径。只输出 JSON。",
+            },
         ],
-        "temperature": 0.2,
-        "max_output_tokens": 1200,
+        temperature=0,
+        max_output_tokens=220,
+    )
+    data = parse_json_text(text)
+    product_kind = normalize_generation_path(data.get("productKind"))
+    if not product_kind:
+        lowered = text.lower()
+        product_kind = "apparel" if "apparel" in lowered else "non_apparel"
+    if not product_kind:
+        product_kind = "non_apparel"
+    return product_kind, str(data.get("reason") or "").strip()
+
+
+def detect_reference_face(reference_data_url, settings):
+    text = call_vision_model(
+        model=settings["visionModel"],
+        instructions=REFERENCE_FACE_PROMPT,
+        content=[
+            {"type": "input_image", "image_url": reference_data_url},
+            {
+                "type": "input_text",
+                "text": "只判断参考图里是否有清晰、足够大、适合做人像垫图的人脸。只输出 JSON。",
+            },
+        ],
+        temperature=0,
+        max_output_tokens=180,
+    )
+    data = parse_json_text(text)
+    has_face = bool(data.get("hasFace"))
+    reason = str(data.get("reason") or "").strip()
+    if not isinstance(data.get("hasFace"), bool):
+        lowered = text.lower()
+        has_face = '"hasface": true' in lowered or '"hasface":true' in lowered
+    return has_face, reason
+
+
+def compose_non_apparel_prompt(reference_data_url, product_data_url, settings):
+    subject_hint = settings.get("productSubjectHint", "")
+    user_prompt = settings.get("userPrompt", "").strip() or DEFAULTS["defaultUserPrompt"]
+    text = call_vision_model(
+        model=settings["visionModel"],
+        instructions=settings["nonApparelPrompt"],
+        content=[
+            {"type": "input_image", "image_url": reference_data_url},
+            {"type": "input_image", "image_url": product_data_url},
+            {
+                "type": "input_text",
+                "text": (
+                    "第一张图是参考图，只负责提供场景模板。"
+                    "第二张图是商品图，只负责提供最终要替换进去的非服饰商品主体。"
+                    f"{build_subject_hint_text(subject_hint)}"
+                    f"用户补充要求：{user_prompt}"
+                    "请直接输出一整段最终给生图模型使用的中文 prompt。"
+                ),
+            },
+        ],
+        temperature=0.2,
+        max_output_tokens=1200,
+    )
+    return text or build_non_apparel_fallback(subject_hint, user_prompt)
+
+
+def compose_apparel_portrait_prompt(reference_data_url, settings):
+    user_prompt = settings.get("userPrompt", "").strip() or DEFAULTS["defaultUserPrompt"]
+    text = call_vision_model(
+        model=settings["visionModel"],
+        instructions=settings["apparelPortraitPrompt"],
+        content=[
+            {"type": "input_image", "image_url": reference_data_url},
+            {
+                "type": "input_text",
+                "text": (
+                    "这张参考图将只用于先生成一张模特人像垫图。"
+                    "请保留人物气质、姿态、场景、机位、景别、裁切和光影关系，"
+                    "但让模特穿着简洁低干扰的占位基础款，为后续服饰替换留出空间。"
+                    f"用户补充要求：{user_prompt}"
+                    "请只输出一整段最终给生图模型使用的中文 prompt。"
+                ),
+            },
+        ],
+        temperature=0.2,
+        max_output_tokens=1000,
+    )
+    return text or build_apparel_portrait_fallback(user_prompt)
+
+
+def compose_apparel_final_prompt(
+    reference_data_url,
+    product_data_url,
+    portrait_image_url,
+    reference_has_face,
+    settings,
+):
+    subject_hint = settings.get("productSubjectHint", "")
+    user_prompt = settings.get("userPrompt", "").strip() or DEFAULTS["defaultUserPrompt"]
+    content = [{"type": "input_image", "image_url": reference_data_url}]
+    if portrait_image_url:
+        content.append({"type": "input_image", "image_url": portrait_image_url})
+    content.append({"type": "input_image", "image_url": product_data_url})
+    content.append(
+        {
+            "type": "input_text",
+            "text": (
+                "第一张图是参考图，只负责提供场景模板。"
+                + (
+                    "第二张图是已经生成好的模特人像垫图，必须尽量保留这张图里的脸、头发、体态和裁切；"
+                    "第三张图是用户上传的服饰商品图。"
+                    if portrait_image_url
+                    else "第二张图是用户上传的服饰商品图。"
+                )
+                + (
+                    "参考图里有人脸，所以最终图必须尽量沿用人像垫图作为模特基础。"
+                    if reference_has_face
+                    else "参考图里没有可用人脸，因此最终图不需要先依赖人像垫图脸部一致性。"
+                )
+                + build_subject_hint_text(subject_hint)
+                + f"用户补充要求：{user_prompt}"
+                + "请只输出一整段最终给生图模型使用的中文 prompt。"
+            ),
+        }
+    )
+    text = call_vision_model(
+        model=settings["visionModel"],
+        instructions=settings["apparelFinalPrompt"],
+        content=content,
+        temperature=0.2,
+        max_output_tokens=1400,
+    )
+    return text or build_apparel_final_fallback(subject_hint, user_prompt, reference_has_face)
+
+
+def call_vision_model(model, instructions, content, temperature, max_output_tokens):
+    payload = {
+        "model": model,
+        "instructions": instructions,
+        "input": [{"role": "user", "content": content}],
+        "temperature": temperature,
+        "max_output_tokens": max_output_tokens,
     }
     data = post_json("https://ark.cn-beijing.volces.com/api/v3/responses", payload)
-    output_text = extract_response_text(data)
-    if not output_text:
-        return build_single_pass_fallback(subject_hint, user_prompt)
-    return output_text
+    return extract_response_text(data)
 
 
-def generate_image(prompt, settings):
+def generate_image(prompt, settings, reference_images):
     payload = {
         "model": settings["model"],
         "prompt": prompt,
         "size": settings["imageSize"],
-        "image": settings["productReferenceImage"],
         **settings["extraBody"],
     }
+    normalized_refs = [item for item in reference_images if isinstance(item, str) and item]
+    if normalized_refs:
+        payload["reference_images"] = normalized_refs
+        if len(normalized_refs) == 1:
+            payload["image"] = normalized_refs[0]
+
     data = post_json("https://ark.cn-beijing.volces.com/api/v3/images/generations", payload)
     value = read_by_path(data, settings["responseDataPath"])
     if not isinstance(value, str) or not value:
@@ -242,6 +440,7 @@ def post_json(url, payload):
         raise Exception(f"Ark 请求失败 ({error.code})：{text[:400]}")
     except URLError as error:
         raise Exception(f"Ark 请求失败: {error.reason}")
+
 
 def extract_response_text(data):
     if isinstance(data.get("output_text"), str) and data["output_text"].strip():
@@ -289,13 +488,86 @@ def normalize_data_url(value):
         raise Exception("商品图片格式不正确，请重新上传。")
     return value
 
-def build_single_pass_fallback(subject_hint, user_prompt):
+
+def normalize_generation_path(value):
+    if not isinstance(value, str):
+        return ""
+    normalized = value.strip().lower()
+    if normalized in ("apparel", "服饰"):
+        return "apparel"
+    if normalized in ("non_apparel", "non-apparel", "非服饰"):
+        return "non_apparel"
+    return ""
+
+
+def strip_code_fences(text):
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        parts = cleaned.split("```")
+        if len(parts) >= 3:
+            cleaned = parts[1]
+            if "\n" in cleaned:
+                cleaned = cleaned.split("\n", 1)[1]
+    return cleaned.strip()
+
+
+def parse_json_text(text):
+    cleaned = strip_code_fences(text)
+    if not cleaned:
+        return {}
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(cleaned[start : end + 1])
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def build_subject_hint_text(subject_hint):
+    if not subject_hint:
+        return "如果商品图里有其他干扰元素，请优先锁定真正的商品主体。"
+    return f"用户额外说明商品主体是：{subject_hint}。识别商品主体时必须优先参考这句说明。"
+
+
+def build_non_apparel_fallback(subject_hint, user_prompt):
     subject_text = f"商品主体是{subject_hint}。" if subject_hint else "商品主体以商品图为准。"
     return (
-        "保留参考图的时间段、场景地点、背景环境、光影关系、构图、机位、动作姿态、"
-        "画幅比例与主体占比，只替换展示主体为用户上传的商品。"
+        "保留参考图的场景地点、背景元素、承载面材质、时间段、光影关系、镜头角度、景别、构图、裁切方式和主体占比，"
+        "只替换其中的主体商品为用户上传的非服饰商品。"
         f"{subject_text}"
-        "生成时忠实保留商品图里的款式、材质、颜色、结构和关键细节。"
+        "如果商品图里有品牌文字、特殊结构或小面积装饰，请一并保留。"
+        f"附加要求：{user_prompt}"
+    )
+
+
+def build_apparel_portrait_fallback(user_prompt):
+    return (
+        "生成一张与参考图人物出镜方式、场景、机位、景别、姿态、光影关系和整体氛围尽量一致的模特人像图片，"
+        "保留相近的性别、年龄感、发型、表情和裁切方式，"
+        "但让模特穿着简洁低干扰的基础占位服装，不要使用复杂印花、大面积文字或抢主体的外搭。"
+        f"附加要求：{user_prompt}"
+    )
+
+
+def build_apparel_final_fallback(subject_hint, user_prompt, reference_has_face):
+    portrait_text = (
+        "尽量沿用生成人像里的脸、发型、体态和裁切方式，"
+        if reference_has_face
+        else ""
+    )
+    subject_text = f"商品主体是{subject_hint}。" if subject_hint else "商品主体以商品图为准。"
+    return (
+        "保留参考图的场景地点、时间段、背景布局、光影关系、镜头角度、景别、主体占比、动作姿态、手部位置和裁切方式，"
+        f"{portrait_text}"
+        "把用户上传的服饰自然穿在模特对应部位，只替换服饰主体，不改变人物性别、人数和出镜方式。"
+        f"{subject_text}"
         f"附加要求：{user_prompt}"
     )
 

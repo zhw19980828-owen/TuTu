@@ -306,6 +306,40 @@
   margin-bottom: 18px;
 }
 
+.xhs-replicator-path-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.xhs-replicator-path-chip {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid #39393b;
+  border-radius: 999px;
+  background: #1f1f21;
+  color: #cacacb;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.xhs-replicator-path-chip:hover {
+  border-color: #707072;
+  color: #ffffff;
+}
+
+.xhs-replicator-path-chip.is-active {
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #111111;
+}
+
 .xhs-replicator-actions {
   display: flex;
   flex-wrap: wrap;

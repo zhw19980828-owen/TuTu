@@ -8,60 +8,80 @@
   </head>
   <body>
     <main class="page">
-      <section class="hero">
-        <p class="eyebrow">Commerce Creative Replicator</p>
-        <h1>配置你的电商商拍模型</h1>
-        <p class="intro">
-          插件会把参考图和商品图一起发给你自己的中转后端，真正的 Ark API Key 仍然只保留在服务端。
-        </p>
-      </section>
+      <section class="workspace">
+        <aside class="sidebar">
+          <nav class="sidebar-nav" aria-label="我的页面分栏">
+            <button class="sidebar-link" type="button" data-tab-target="settings">设置</button>
+            <button class="sidebar-link is-active" type="button" data-tab-target="history">生成记录</button>
+          </nav>
+        </aside>
 
-      <section class="card">
-        <form id="settings-form">
-          <label>
-            <span>后端地址</span>
-            <input name="backendBaseUrl" type="url" placeholder="http://127.0.0.1:8787" required />
-          </label>
-          <label>
-            <span>访问口令（可选）</span>
-            <input name="proxyToken" type="password" placeholder="如果后端要求 token，就填这里" />
-          </label>
-          <label>
-            <span>模型名</span>
-            <input name="model" type="text" placeholder="doubao-seedream-4-5-251128" required />
-          </label>
-          <label>
-            <span>识图模型</span>
-            <input name="visionModel" type="text" placeholder="doubao-seed-1-6-251015" required />
-          </label>
-          <label>
-            <span>SP 提示词</span>
-            <textarea name="visionSystemPrompt" rows="7" placeholder="控制唯一的一次 seed1.6 如何同时理解参考图、商品图、主体说明和补充要求，并直接生成最终生图 prompt"></textarea>
-          </label>
-          <label>
-            <span>默认附加 Prompt</span>
-            <textarea name="defaultUserPrompt" rows="4" placeholder="例如：适合电商首页投放、商品主体清晰、背景高级、面料质感明确"></textarea>
-          </label>
-          <label>
-            <span>图片尺寸</span>
-            <input name="imageSize" type="text" placeholder="2K" />
-          </label>
-          <label>
-            <span>返回图片路径</span>
-            <input name="responseDataPath" type="text" placeholder="data[0].url" />
-          </label>
-          <label>
-            <span>额外请求体 JSON</span>
-            <textarea name="extraBody" rows="6" placeholder='{"sequential_image_generation":"disabled","response_format":"url","stream":false,"watermark":true}'></textarea>
-          </label>
-          <div class="actions">
-            <button type="submit" id="save-button">保存设置</button>
-            <a href="https://www.xiaohongshu.com" target="_blank" rel="noreferrer">打开站点测试</a>
-          </div>
-          <p class="status" id="status"></p>
-        </form>
+        <section class="content-card">
+          <section class="tab-panel" data-tab-panel="settings">
+            <form id="settings-form">
+              <label>
+                <span>后端地址</span>
+                <input name="backendBaseUrl" type="url" placeholder="http://127.0.0.1:8787" required />
+              </label>
+              <label>
+                <span>访问口令（可选）</span>
+                <input name="proxyToken" type="password" placeholder="如果后端要求 token，就填这里" />
+              </label>
+              <label>
+                <span>模型名</span>
+                <input name="model" type="text" placeholder="doubao-seedream-4-5-251128" required />
+              </label>
+              <label>
+                <span>识图模型</span>
+                <input name="visionModel" type="text" placeholder="doubao-seed-1-6-251015" required />
+              </label>
+              <label>
+                <span>非服饰 SP</span>
+                <textarea name="nonApparelPrompt" rows="8" placeholder="控制非服饰链路：参考图负责场景模板，商品图负责主体替换。"></textarea>
+              </label>
+              <label>
+                <span>服饰人像 SP</span>
+                <textarea name="apparelPortraitPrompt" rows="8" placeholder="控制服饰链路第一步：根据参考图先生成模特人像垫图。"></textarea>
+              </label>
+              <label>
+                <span>服饰最终图 SP</span>
+                <textarea name="apparelFinalPrompt" rows="8" placeholder="控制服饰链路第二步：结合参考图、生成的人像图和商品图输出最终 prompt。"></textarea>
+              </label>
+              <label>
+                <span>默认附加 Prompt</span>
+                <textarea name="defaultUserPrompt" rows="4" placeholder="例如：适合电商首页投放、商品主体清晰、背景高级、面料质感明确"></textarea>
+              </label>
+              <label>
+                <span>图片尺寸</span>
+                <input name="imageSize" type="text" placeholder="2K" />
+              </label>
+              <label>
+                <span>返回图片路径</span>
+                <input name="responseDataPath" type="text" placeholder="data[0].url" />
+              </label>
+              <label>
+                <span>额外请求体 JSON</span>
+                <textarea name="extraBody" rows="6" placeholder='{"sequential_image_generation":"disabled","response_format":"url","stream":false,"watermark":true}'></textarea>
+              </label>
+              <div class="actions">
+                <button type="submit" id="save-button">保存设置</button>
+                <a href="https://www.xiaohongshu.com" target="_blank" rel="noreferrer">打开站点测试</a>
+              </div>
+              <p class="status" id="status"></p>
+            </form>
+          </section>
+
+          <section class="tab-panel is-active" data-tab-panel="history">
+            <div class="history-grid" id="history-grid"></div>
+            <div class="history-empty" id="history-empty" hidden>还没有生成记录，先去生成一张试试。</div>
+          </section>
+        </section>
       </section>
     </main>
+    <div class="lightbox" id="lightbox" hidden>
+      <button class="lightbox-close" id="lightbox-close" type="button" aria-label="关闭预览">关闭</button>
+      <img class="lightbox-image" id="lightbox-image" alt="生成结果大图预览" />
+    </div>
     <script src="./options.js"></script>
   </body>
 </html>

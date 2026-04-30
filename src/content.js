@@ -11,6 +11,10 @@
     analysisPrompt: "",
     productImageDataUrl: "",
     productFileName: "",
+    generationPath: "",
+    generationPathSource: "",
+    classificationPending: false,
+    classificationJobId: 0,
     stageTimer: null,
     progressTimer: null,
     hideTimer: null,
@@ -111,6 +115,13 @@
                 </div>
               </div>
               <div class="xhs-replicator-row">
+                <label>生成路径</label>
+                <div class="xhs-replicator-path-switch" data-role="path-switch">
+                  <button class="xhs-replicator-path-chip" type="button" data-path="apparel">服饰</button>
+                  <button class="xhs-replicator-path-chip" type="button" data-path="non_apparel">非服饰</button>
+                </div>
+              </div>
+              <div class="xhs-replicator-row">
                 <label for="xhs-replicator-subject">商品主体说明（可选）</label>
                 <input id="xhs-replicator-subject" type="text" placeholder="例如：女装连衣裙、银色戒指、玻璃香水瓶。白底商品图不写也可以。" />
               </div>
@@ -131,8 +142,8 @@
                 </select>
               </div>
               <div class="xhs-replicator-actions">
-                <button class="xhs-replicator-button" data-variant="primary" data-role="generate">上传商品后生成</button>
-                <button class="xhs-replicator-button" data-variant="secondary" data-role="settings">打开设置</button>
+                <button class="xhs-replicator-button" data-variant="primary" data-role="generate">生成</button>
+                <button class="xhs-replicator-button" data-variant="secondary" data-role="settings">我的</button>
               </div>
             </div>
             <div class="xhs-replicator-status"></div>
@@ -165,6 +176,7 @@
     const uploadCard = mask.querySelector('[data-role="upload-card"]');
     const productChip = mask.querySelector('[data-role="product-chip"]');
     const productThumb = mask.querySelector('[data-role="product-thumb"]');
+    const pathButtons = Array.from(mask.querySelectorAll(".xhs-replicator-path-chip"));
     const subjectInput = mask.querySelector("#xhs-replicator-subject");
     const notesInput = mask.querySelector("#xhs-replicator-notes");
     const ratioInput = mask.querySelector("#xhs-replicator-ratio");
@@ -230,6 +242,7 @@
         uploadCard,
         productChip
       });
+      setGenerationPath(pathButtons, "");
     });
 
     productInput.addEventListener("change", async () => {
@@ -241,16 +254,21 @@
           uploadCard,
           productChip
         });
+        setGenerationPath(pathButtons, "");
         return;
       }
 
       try {
+        const classificationJobId = ++state.classificationJobId;
         state.productImageDataUrl = await readFileAsDataUrl(file);
         state.productFileName = file.name;
+        state.generationPath = "";
+        state.generationPathSource = "";
         productThumb.src = state.productImageDataUrl;
         uploadCard.hidden = true;
         productChip.hidden = false;
-        status.textContent = "";
+        status.textContent = "正在识别商品类型...";
+        await autoClassifyProduct(pathButtons, status, classificationJobId);
       } catch (error) {
         clearProductSelection({
           productInput,
@@ -262,6 +280,18 @@
       }
     });
 
+    pathButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setGenerationPath(pathButtons, button.dataset.path || "", "manual");
+        status.textContent =
+          state.generationPath === "apparel"
+            ? "已切换为服饰路径。"
+            : state.generationPath === "non_apparel"
+              ? "已切换为非服饰路径。"
+              : "";
+      });
+    });
+
     generateButton.addEventListener("click", async () => {
       if (!state.currentImageUrl) {
         status.textContent = "没有拿到参考图地址，请重新 hover 一次图片。";
@@ -271,11 +301,19 @@
         status.textContent = "请先上传你自己的商品图片。";
         return;
       }
+      if (state.classificationPending && !state.generationPath) {
+        status.textContent = "正在识别商品类型，请稍等一下。";
+        return;
+      }
+      if (!state.generationPath) {
+        status.textContent = "还没有识别出商品路径，请重新上传商品图或手动选择。";
+        return;
+      }
 
       generateButton.disabled = true;
       generateButton.textContent = "生成中...";
       status.textContent = "正在处理中，请稍等。";
-      startProgress(progressWrap, progressLabel, progressFill);
+      startProgress(progressWrap, progressLabel, progressFill, state.generationPath);
       try {
         const response = await chrome.runtime.sendMessage({
           type: "replicate-image",
@@ -284,6 +322,7 @@
             productImageDataUrl: state.productImageDataUrl,
             productFileName: state.productFileName,
             productSubjectHint: subjectInput.value.trim(),
+            generationPath: state.generationPath,
             userPrompt: notesInput.value.trim(),
             imageSizeOverride: resolveImageSizeOverride(ratioInput.value)
           }
@@ -307,7 +346,7 @@
         status.textContent = `生成失败：${error instanceof Error ? error.message : String(error)}`;
       } finally {
         generateButton.disabled = false;
-        generateButton.textContent = "上传商品后生成";
+        generateButton.textContent = "生成";
       }
     });
 
@@ -319,6 +358,7 @@
       uploadCard,
       productChip,
       productThumb,
+      pathButtons,
       subjectInput,
       notesInput,
       ratioInput,
@@ -349,6 +389,7 @@
       uploadCard: modal.uploadCard,
       productChip: modal.productChip
     });
+    setGenerationPath(modal.pathButtons, "");
     modal.resultWrap.hidden = true;
     modal.debugText.textContent = "";
     modal.resultImage.removeAttribute("src");
@@ -386,8 +427,12 @@
   }
 
   function clearProductSelection({ productInput, productThumb, uploadCard, productChip }) {
+    state.classificationJobId += 1;
     state.productImageDataUrl = "";
     state.productFileName = "";
+    state.generationPath = "";
+    state.generationPathSource = "";
+    state.classificationPending = false;
     if (productInput) {
       productInput.value = "";
     }
@@ -399,6 +444,61 @@
     }
     if (productChip) {
       productChip.hidden = true;
+    }
+  }
+
+  function setGenerationPath(pathButtons, nextPath, source = "") {
+    state.generationPath = nextPath;
+    state.generationPathSource = nextPath ? source : "";
+    pathButtons.forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.path === nextPath);
+    });
+  }
+
+  async function autoClassifyProduct(pathButtons, status, classificationJobId) {
+    state.classificationPending = true;
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "classify-product",
+        payload: {
+          productImageDataUrl: state.productImageDataUrl
+        }
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || "识别失败");
+      }
+      if (classificationJobId !== state.classificationJobId) {
+        return;
+      }
+      const nextPath = response.result?.productKind === "apparel" ? "apparel" : "non_apparel";
+      if (state.generationPathSource !== "manual") {
+        setGenerationPath(pathButtons, nextPath, "auto");
+        status.textContent =
+          nextPath === "apparel" ? "已自动识别为服饰。可手动切换。" : "已自动识别为非服饰。可手动切换。";
+      } else {
+        status.textContent =
+          nextPath === "apparel"
+            ? "自动识别为服饰，你当前使用的是手动选择。"
+            : "自动识别为非服饰，你当前使用的是手动选择。";
+      }
+    } catch (error) {
+      if (classificationJobId !== state.classificationJobId) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("Extension context invalidated")) {
+        status.textContent = "扩展刚刚更新，刷新当前页面后再试。";
+        return;
+      }
+      if (!state.generationPath) {
+        status.textContent = `自动识别失败，请手动选择路径：${message}`;
+      } else {
+        status.textContent = `自动识别失败，但已保留你当前的手动路径：${message}`;
+      }
+    } finally {
+      if (classificationJobId === state.classificationJobId) {
+        state.classificationPending = false;
+      }
     }
   }
 
@@ -548,15 +648,24 @@
     return rounded % 2 === 0 ? rounded : rounded + 1;
   }
 
-  function startProgress(progressWrap, progressLabel, progressFill) {
+  function startProgress(progressWrap, progressLabel, progressFill, generationPath) {
     stopProgress(progressWrap, progressLabel, progressFill);
     progressWrap.hidden = false;
-    const steps = [
-      { label: "1/4 正在分析参考图里的场景、时间和人物动作", progress: 18 },
-      { label: "2/4 正在识别商品图里的主体、材质和细节", progress: 38 },
-      { label: "3/4 正在融合姿态、角度、商品与场景约束", progress: 62 },
-      { label: "4/4 正在调用生图模型生成最终画面", progress: 84 }
-    ];
+    const steps =
+      generationPath === "apparel"
+        ? [
+            { label: "1/5 正在识别商品是服饰，并检查参考图里是否有人脸", progress: 14 },
+            { label: "2/5 正在学习参考图并生成人像垫图 Prompt", progress: 30 },
+            { label: "3/5 正在生成模特人像垫图", progress: 48 },
+            { label: "4/5 正在融合参考图、人像图和商品图约束", progress: 72 },
+            { label: "5/5 正在生成最终服饰画面", progress: 88 }
+          ]
+        : [
+            { label: "1/4 正在分析参考图里的场景、时间和主体关系", progress: 18 },
+            { label: "2/4 正在识别商品图里的主体与高辨识度细节", progress: 38 },
+            { label: "3/4 正在融合商品与场景约束", progress: 62 },
+            { label: "4/4 正在生成最终画面", progress: 84 }
+          ];
     let index = 0;
     progressLabel.textContent = steps[0].label;
     progressFill.style.width = `${steps[0].progress}%`;
