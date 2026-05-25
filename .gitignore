@@ -1,6 +1,7 @@
 .DS_Store
 *.zip
 .env
+.openrouter_key
 server/.env
 node_modules/
 __pycache__/

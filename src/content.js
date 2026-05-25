@@ -9,6 +9,7 @@
     currentImageUrl: "",
     generatedImageUrl: "",
     analysisPrompt: "",
+    imageRequestDebug: null,
     productImageDataUrl: "",
     productFileName: "",
     generationPath: "",
@@ -163,6 +164,10 @@
                   <summary>查看最终生图 Prompt</summary>
                   <pre class="xhs-replicator-debug-text"></pre>
                 </details>
+                <details class="xhs-replicator-debug">
+                  <summary>查看发给生图模型的输入</summary>
+                  <pre class="xhs-replicator-debug-request"></pre>
+                </details>
                 <img alt="复刻结果" />
               </div>
             </div>
@@ -186,6 +191,7 @@
     const progressFill = mask.querySelector(".xhs-replicator-progress-fill");
     const resultWrap = mask.querySelector(".xhs-replicator-result");
     const debugText = mask.querySelector(".xhs-replicator-debug-text");
+    const debugRequestText = mask.querySelector(".xhs-replicator-debug-request");
     const resultImage = mask.querySelector(".xhs-replicator-result img");
     const generateButton = mask.querySelector('[data-role="generate"]');
     const formSection = mask.querySelector(".xhs-replicator-form");
@@ -332,7 +338,9 @@
         }
         state.generatedImageUrl = response.result.imageUrl;
         state.analysisPrompt = response.result.analysisPrompt || "";
+        state.imageRequestDebug = response.result.imageRequestDebug || null;
         debugText.textContent = response.result.prompt || "";
+        debugRequestText.textContent = formatImageRequestDebug(state.imageRequestDebug);
         resultImage.src = state.generatedImageUrl;
         resultWrap.hidden = false;
         finishProgress(progressLabel, progressFill);
@@ -369,6 +377,7 @@
       formSection,
       resultWrap,
       debugText,
+      debugRequestText,
       resultImage
     };
   }
@@ -392,6 +401,7 @@
     setGenerationPath(modal.pathButtons, "");
     modal.resultWrap.hidden = true;
     modal.debugText.textContent = "";
+    modal.debugRequestText.textContent = "";
     modal.resultImage.removeAttribute("src");
     modal.mask.dataset.open = "true";
     modal.mask.style.display = "flex";
@@ -697,6 +707,17 @@
     if (state.progressTimer) {
       window.clearInterval(state.progressTimer);
       state.progressTimer = null;
+    }
+  }
+
+  function formatImageRequestDebug(debug) {
+    if (!debug) {
+      return "当前没有可用的生图模型输入记录。";
+    }
+    try {
+      return JSON.stringify(debug, null, 2);
+    } catch (error) {
+      return "生图模型输入记录格式化失败。";
     }
   }
 })();

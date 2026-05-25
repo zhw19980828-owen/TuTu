@@ -24,6 +24,10 @@ const lightboxImage = document.querySelector("#lightbox-image");
 const lightboxClose = document.querySelector("#lightbox-close");
 const SETTINGS_KEY = "userSettings";
 const GENERATION_RECORDS_KEY = "generationRecords";
+const MODEL_MIGRATIONS = {
+  "doubao-seedream-4-5-251128": "openai/gpt-5.4-image-2",
+  "doubao-seed-1-6-251015": "moonshotai/kimi-k2.6"
+};
 
 bootstrap();
 
@@ -40,6 +44,7 @@ async function bootstrap() {
       ...defaults,
       ...storage
     };
+    migrateLegacyModels(settings);
     for (const field of fields) {
       const element = form.elements.namedItem(field);
       if (!element) {
@@ -116,10 +121,26 @@ function formatNow() {
 async function getSavedSettings() {
   const localStorage = await chrome.storage.local.get([SETTINGS_KEY]);
   if (localStorage[SETTINGS_KEY]) {
-    return localStorage[SETTINGS_KEY];
+    const settings = { ...localStorage[SETTINGS_KEY] };
+    migrateLegacyModels(settings);
+    return settings;
   }
   const syncStorage = await chrome.storage.sync.get([SETTINGS_KEY]);
-  return syncStorage[SETTINGS_KEY] || {};
+  const settings = { ...(syncStorage[SETTINGS_KEY] || {}) };
+  migrateLegacyModels(settings);
+  return settings;
+}
+
+function migrateLegacyModels(settings) {
+  if (!settings || typeof settings !== "object") {
+    return;
+  }
+  if (settings.model && MODEL_MIGRATIONS[settings.model]) {
+    settings.model = MODEL_MIGRATIONS[settings.model];
+  }
+  if (settings.visionModel && MODEL_MIGRATIONS[settings.visionModel]) {
+    settings.visionModel = MODEL_MIGRATIONS[settings.visionModel];
+  }
 }
 
 function bindTabs() {
