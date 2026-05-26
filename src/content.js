@@ -139,7 +139,7 @@
                   <option value="16:9">16:9</option>
                   <option value="9:16">9:16</option>
                   <option value="1:1">1:1</option>
-                  <option value="2.35:1">2.35:1</option>
+                  <option value="21:9">21:9</option>
                 </select>
               </div>
               <div class="xhs-replicator-actions">
@@ -321,24 +321,24 @@
       status.textContent = "正在处理中，请稍等。";
       startProgress(progressWrap, progressLabel, progressFill, state.generationPath);
       try {
-        const response = await chrome.runtime.sendMessage({
-          type: "replicate-image",
-          payload: {
-            imageUrl: state.currentImageUrl,
-            productImageDataUrl: state.productImageDataUrl,
-            productFileName: state.productFileName,
-            productSubjectHint: subjectInput.value.trim(),
-            generationPath: state.generationPath,
-            userPrompt: notesInput.value.trim(),
-            imageSizeOverride: resolveImageSizeOverride(ratioInput.value)
-          }
+        const response = await replicateImageDirectly({
+          imageUrl: state.currentImageUrl,
+          productImageDataUrl: state.productImageDataUrl,
+          productFileName: state.productFileName,
+          productSubjectHint: subjectInput.value.trim(),
+          generationPath: state.generationPath,
+          userPrompt: notesInput.value.trim(),
+          imageSizeOverride: resolveImageSizeOverride(ratioInput.value)
         });
         if (!response?.ok) {
           throw new Error(response?.error || "请求失败");
         }
         state.generatedImageUrl = response.result.imageUrl;
         state.analysisPrompt = response.result.analysisPrompt || "";
-        state.imageRequestDebug = response.result.imageRequestDebug || null;
+        state.imageRequestDebug = {
+          ...(response.result.imageRequestDebug || {}),
+          timings: response.result.timings || []
+        };
         debugText.textContent = response.result.prompt || "";
         debugRequestText.textContent = formatImageRequestDebug(state.imageRequestDebug);
         resultImage.src = state.generatedImageUrl;
@@ -585,26 +585,124 @@
     });
   }
 
-  function resolveImageSizeOverride(value) {
-    if (value === "follow") {
-      const ratio = getReferenceRatio();
-      return ratio ? buildSizeFromRatio(ratio) : "";
+  async function replicateImageDirectly(payload) {
+    const settings = await getLocalTestSettings();
+    const requestBody = {
+      imageUrl: payload.imageUrl,
+      productImageDataUrl: payload.productImageDataUrl,
+      productFileName: payload.productFileName || "",
+      productSubjectHint: payload.productSubjectHint || "",
+      generationPath: payload.generationPath || "",
+      userPrompt: payload.userPrompt || "",
+      model: settings.model,
+      visionModel: settings.visionModel,
+      nonApparelPrompt: settings.nonApparelPrompt,
+      apparelPortraitPrompt: settings.apparelPortraitPrompt,
+      apparelFinalPrompt: settings.apparelFinalPrompt,
+      defaultUserPrompt: settings.defaultUserPrompt,
+      imageSize: payload.imageSizeOverride || settings.imageSize,
+      responseDataPath: settings.responseDataPath,
+      extraBody: parseExtraBody(settings.extraBody)
+    };
+
+    const response = await fetch(`${settings.backendBaseUrl.replace(/\/+$/, "")}/replicate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(formatBackendError(response.status, text));
     }
-    const ratio = parseRatio(value);
-    return ratio ? buildSizeFromRatio(ratio.width / ratio.height) : "";
+
+    const data = await response.json();
+    if (!data?.imageUrl) {
+      throw new Error("后端返回成功，但没有提供生成图片地址。");
+    }
+    return {
+      ok: true,
+      result: {
+        imageUrl: data.imageUrl,
+        prompt: data.prompt || "",
+        imageRequestDebug: data.imageRequestDebug || null,
+        timings: Array.isArray(data.timings) ? data.timings : [],
+        generationPath: data.generationPath || payload.generationPath || "",
+        portraitImageUrl: data.portraitImageUrl || "",
+        referenceHasFace: Boolean(data.referenceHasFace),
+        analysisPrompt: data.analysisPrompt || "",
+        productAnalysisPrompt: data.productAnalysisPrompt || "",
+        referenceAnalysisPrompt: data.referenceAnalysisPrompt || ""
+      }
+    };
   }
 
-  function getReferenceRatio() {
+  async function getLocalTestSettings() {
+    const response = await chrome.runtime.sendMessage({ type: "get-default-settings" });
+    const defaults = response?.ok ? response.result || {} : {};
+    return {
+      ...defaults,
+      backendBaseUrl: "http://127.0.0.1:8787",
+      proxyToken: "",
+      model: "openai/gpt-5.4-image-2",
+      visionModel: "moonshotai/kimi-k2.6",
+      nonApparelPrompt: defaults.nonApparelPrompt || "",
+      defaultUserPrompt: ""
+    };
+  }
+
+  function parseExtraBody(raw) {
+    if (!raw || !String(raw).trim()) {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (error) {
+      throw new Error("extraBody 不是合法 JSON，请到设置页修正后重试。");
+    }
+  }
+
+  function formatBackendError(status, text) {
+    if (!text) {
+      return `复刻失败 (${status})：未知错误`;
+    }
+    try {
+      const parsed = JSON.parse(text);
+      const message = parsed?.error || text;
+      const debugText = parsed?.imageRequestDebug
+        ? `\n\n发给生图模型的输入：\n${JSON.stringify(parsed.imageRequestDebug, null, 2)}`
+        : "";
+      const visionDebugText = parsed?.visionDebug
+        ? `\n\n识图模型返回摘要：\n${JSON.stringify(parsed.visionDebug, null, 2)}`
+        : "";
+      return `复刻失败 (${status})：${String(message).slice(0, 400)}${debugText}${visionDebugText}`;
+    } catch (error) {
+      return `复刻失败 (${status})：${text.slice(0, 400)}`;
+    }
+  }
+
+  function resolveImageSizeOverride(value) {
+    if (value === "follow") {
+      return getReferenceAspectRatio();
+    }
+    return parseRatio(value) ? value : "";
+  }
+
+  function getReferenceAspectRatio() {
     const image = state.currentImage;
     if (!(image instanceof HTMLImageElement)) {
-      return 0;
+      return "";
     }
-    const width = image.naturalWidth || image.width;
-    const height = image.naturalHeight || image.height;
+    const rect = image.getBoundingClientRect();
+    const width = image.naturalWidth || image.width || Math.round(rect.width);
+    const height = image.naturalHeight || image.height || Math.round(rect.height);
     if (!width || !height) {
-      return 0;
+      return "";
     }
-    return width / height;
+    return closestSupportedAspectRatio(width / height);
   }
 
   function parseRatio(value) {
@@ -625,37 +723,27 @@
     return { width, height };
   }
 
-  function buildSizeFromRatio(ratio) {
-    if (!ratio || !Number.isFinite(ratio) || ratio <= 0) {
+  function closestSupportedAspectRatio(ratio) {
+    if (!Number.isFinite(ratio) || ratio <= 0) {
       return "";
     }
-
-    let width;
-    let height;
-    if (ratio >= 1) {
-      width = 3072;
-      height = roundEven(width / ratio);
-      if (height < 1024) {
-        height = 1024;
-        width = roundEven(height * ratio);
-      }
-    } else {
-      height = 3072;
-      width = roundEven(height * ratio);
-      if (width < 1024) {
-        width = 1024;
-        height = roundEven(width / ratio);
-      }
-    }
-
-    width = Math.min(4096, width);
-    height = Math.min(4096, height);
-    return `${width}x${height}`;
-  }
-
-  function roundEven(value) {
-    const rounded = Math.max(2, Math.round(value));
-    return rounded % 2 === 0 ? rounded : rounded + 1;
+    const supported = [
+      { value: "1:1", ratio: 1 },
+      { value: "2:3", ratio: 2 / 3 },
+      { value: "3:2", ratio: 3 / 2 },
+      { value: "3:4", ratio: 3 / 4 },
+      { value: "4:3", ratio: 4 / 3 },
+      { value: "4:5", ratio: 4 / 5 },
+      { value: "5:4", ratio: 5 / 4 },
+      { value: "9:16", ratio: 9 / 16 },
+      { value: "16:9", ratio: 16 / 9 },
+      { value: "21:9", ratio: 21 / 9 }
+    ];
+    return supported.reduce((best, item) => {
+      const currentDistance = Math.abs(Math.log(item.ratio / ratio));
+      const bestDistance = Math.abs(Math.log(best.ratio / ratio));
+      return currentDistance < bestDistance ? item : best;
+    }).value;
   }
 
   function startProgress(progressWrap, progressLabel, progressFill, generationPath) {

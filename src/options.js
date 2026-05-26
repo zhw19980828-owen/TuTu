@@ -24,6 +24,13 @@ const lightboxImage = document.querySelector("#lightbox-image");
 const lightboxClose = document.querySelector("#lightbox-close");
 const SETTINGS_KEY = "userSettings";
 const GENERATION_RECORDS_KEY = "generationRecords";
+const LOCAL_TEST_SETTINGS = {
+  backendBaseUrl: "http://127.0.0.1:8787",
+  proxyToken: "",
+  model: "openai/gpt-5.4-image-2",
+  visionModel: "moonshotai/kimi-k2.6",
+  defaultUserPrompt: ""
+};
 const MODEL_MIGRATIONS = {
   "doubao-seedream-4-5-251128": "openai/gpt-5.4-image-2",
   "doubao-seed-1-6-251015": "moonshotai/kimi-k2.6"
@@ -42,8 +49,11 @@ async function bootstrap() {
     const storage = await getSavedSettings();
     const settings = {
       ...defaults,
-      ...storage
+      ...storage,
+      ...LOCAL_TEST_SETTINGS
     };
+    settings.nonApparelPrompt = defaults.nonApparelPrompt || settings.nonApparelPrompt;
+    settings.apparelFinalPrompt = defaults.apparelFinalPrompt || settings.apparelFinalPrompt;
     migrateLegacyModels(settings);
     for (const field of fields) {
       const element = form.elements.namedItem(field);
@@ -170,7 +180,9 @@ async function renderGenerationRecords() {
     return;
   }
 
-  const records = Array.isArray(response.result) ? response.result : [];
+  const records = (Array.isArray(response.result) ? response.result : []).filter(
+    (record) => record?.imageUrl
+  );
   if (!records.length) {
     historyGrid.innerHTML = "";
     historyEmpty.hidden = false;
@@ -180,18 +192,19 @@ async function renderGenerationRecords() {
 
   historyEmpty.hidden = true;
   historyGrid.innerHTML = records
-    .map(
-      (record) => `
-        <article class="history-card" data-image-url="${escapeHtml(record.imageUrl || "")}">
+    .map((record) => {
+      const imageUrl = record.imageUrl || "";
+      return `
+        <article class="history-card" data-image-url="${escapeHtml(imageUrl)}">
           <div class="history-image-wrap">
-            <img class="history-image" src="${escapeHtml(record.imageUrl || "")}" alt="生成结果" loading="lazy" />
+            <img class="history-image" src="${escapeHtml(imageUrl)}" alt="生成结果" loading="lazy" />
             <div class="history-overlay">
               <div class="history-time">${formatRecordTime(record.createdAt)}</div>
             </div>
           </div>
         </article>
-      `
-    )
+      `;
+    })
     .join("");
 
   historyGrid.querySelectorAll(".history-card").forEach((card) => {

@@ -3,6 +3,9 @@
 import base64
 import json
 import os
+import time
+import uuid
+from http.client import IncompleteRead, RemoteDisconnected
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -12,14 +15,17 @@ PORT = int(os.environ.get("PORT", "8787"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("ARK_API_KEY", "")
 PROXY_TOKEN = os.environ.get("PROXY_TOKEN", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GENERATED_IMAGES = {}
+GENERATED_IMAGE_ORDER = []
+MAX_GENERATED_IMAGES = 20
 
 DEFAULTS = {
     "model": "openai/gpt-5.4-image-2",
     "visionModel": "moonshotai/kimi-k2.6",
-    "nonApparelPrompt": "你是一位电商静物与非服饰商品复刻提示词专家。你会同时看到一张参考图和一张商品图。你的任务是把两张图转成一段最终可以直接交给生图模型的中文 prompt，让生图模型生成一张“用户商品主体正确，但摄影语言和参考图高度一致”的新图片。参考图只负责提供画面模板，你必须准确识别并继承参考图里的拍摄方式、画幅比例、景别、镜头角度、机位高低、焦段感、主体在画面中的位置和占比、主体朝向、主体倾斜角度、主体俯仰角度、主体与承载面的接触点、主体是否平放/斜放/竖立/悬浮/倚靠、多个物体之间的前后层级和遮挡关系、主体边缘与画面边界的距离、裁切方式、场景地点、背景元素、承载面材质、时间段、主光方向、光线质感、色温、曝光方式、色彩氛围、景深关系、主体与背景的光影关系，以及画面中原本存在的真实陈列和生活痕迹。商品图会直接作为后续生图模型的唯一商品参考图，因此最终 prompt 里不要详细描述商品本身的颜色、材质、品牌、logo、文字、纹理、形状、结构、链节、刻字、装饰、边缘、工艺、尺寸等视觉细节，这些交给图像参考通道。你只能极简点明商品品类和融入方式，例如“一枚戒指作为主体”“一个包放在桌面中央”“一瓶香水替换原主体”。最终输出必须是一整段中文 prompt，直接描述最终生成图片本身：保留参考图的场景、构图、镜头角度、主体摆放姿态、主体朝向、主体落点、前后层级、光影、景别、主体大小和整体气质，让商品图中的商品作为新主体出现在相同视觉框架里。不要输出解释、标题、分析过程、分点或 JSON。",
+    "nonApparelPrompt": "你是一位真实商品摄影与非服饰商品复刻提示词专家。你会同时看到一张参考图和一张商品图。你的任务是把两张图转成一段最终可以直接交给生图模型的中文 prompt，让生图模型生成一张“用户商品主体正确，但摄影语言和参考图高度一致”的真实拍摄效果图片。参考图只负责提供画面模板，你必须像摄影师复盘机位一样，准确识别并继承参考图里的画幅比例、景别、镜头焦段感、相机高度、俯拍/平拍/仰拍程度、镜头向左或向右的水平偏转、画面近端和远端的位置、透视收缩方向、水平线或盒边/桌边的斜率、主体在画面中的位置和占比、主体朝向、主体长轴方向、主体倾斜角度、主体俯仰角度、主体与承载面的接触点、主体是否平放/斜放/竖立/悬浮/倚靠/嵌入卡槽/半露出/叠放/被托起、多个物体之间的前后层级和遮挡关系、主体边缘与画面边界的距离、裁切方式、场景地点、背景元素、承载面材质、时间段、主光方向、光线质感、色温、曝光方式、色彩氛围、景深关系、主体与背景的光影关系，以及画面中原本存在的真实陈列和生活痕迹。最终 prompt 必须明确写出相机视角：例如低角度贴近桌面、从正前方略偏右看向左后方、从上方约 30 度俯视、镜头沿盒子对角线方向拍摄、近处盒沿在画面底部横向穿过、远处盒盖向右上方退去等；不要只写“微距特写、低角度俯拍”这种笼统词。最终 prompt 还必须用具体方位写清楚新商品的摆放姿势：它位于画面哪个区域，长轴或开口朝向哪里，正面/侧面/顶部露出多少，是否贴着、压在、嵌入、悬在、靠着或插入某个承载物，接触点在哪里，阴影落向哪里；如果参考图中原主体有专用托槽、盒垫、支架、桌面边缘、布面褶皱或局部遮挡，必须让新商品占用同一个空间关系。商品图会直接作为后续生图模型的唯一商品参考图，因此最终 prompt 里不要详细描述商品本身的颜色、材质、品牌、logo、文字、纹理、形状、结构、链节、刻字、装饰、边缘、工艺、尺寸等视觉细节，这些交给图像参考通道。你只能极简点明商品品类和融入方式，例如“一枚戒指嵌在盒垫中央的卡槽里，弧面横向朝向镜头，镜头从盒子前下方略偏右的位置沿盒内对角线看过去”“一个包斜靠在桌面右后方”“一瓶香水竖立在原主体落点”。最终输出必须是一整段中文 prompt，直接描述最终生成图片本身：保留参考图的场景、构图、镜头角度、主体摆放姿态、主体朝向、主体落点、前后层级、光影、景别、主体大小和整体气质，画面必须像真实相机拍摄，不要出现 CGI、3D 渲染、插画、海报合成或过度广告精修感。不要输出解释、标题、分析过程、分点或 JSON。",
     "apparelPortraitPrompt": "你是一位电商服饰模特设定提示词专家。你会看到一张参考图，这张图只用来生成一张新的模特人像垫图，后续再把用户的服饰商品替换上去。你的任务是只根据参考图输出一整段中文生图 prompt，用于先生成一张与参考图人物气质、性别、年龄感、脸型、发型长度、发色、妆容浓度、视线方向、头部倾斜、身体朝向、动作姿态、镜头角度、景别、主体占比、裁切方式、场景地点、时间段、背景布局、色彩氛围、光影关系都尽量相似的模特人像图片。你必须保留参考图的人像出镜形式和构图骨架，但要让模特穿着尽量简洁、干净、贴身、低干扰的基础内搭或无明显设计感的占位服装，避免外套、复杂印花、大面积文字、夸张配饰和抢主体的服装细节，以便后续服饰替换。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
-    "apparelFinalPrompt": "你是一位电商服饰换装复刻提示词专家。你会看到参考图、生成的人像垫图和用户的商品图。参考图只负责提供场景模板，你必须继承参考图里的时间段、天气、场景地点、背景布局、机位、镜头角度、景别、主体占比、裁切方式、人物姿态、手部位置、视线方向、光影关系和整体营销氛围。生成的人像垫图是最终模特基础，你必须尽量保留它的人脸、发型、体态、肢体关系和取景裁切。商品图只负责提供要替换上身的服饰主体，商品图会在后续生成阶段作为参考图输入，因此你不需要冗长描述基础颜色和大体轮廓，只需要在容易丢失时补充品牌文字、logo、领口结构、袖型、纽扣排布、特殊拼接、不对称设计、特殊面料工艺等关键特征。你的任务是输出一整段最终给生图模型使用的中文 prompt，要求把商品服饰自然穿在模特对应部位，保持参考图的构图骨架和动作，不要擅自改性别、改人数、改景别、改主体大小，也不要把服饰替换成完全不同的穿法。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
-    "defaultUserPrompt": "输出适合电商投放和商品详情页的高清主视觉，主体明确，商品细节清晰，画面干净高级。",
+    "apparelFinalPrompt": "你是一位真实服饰摄影、穿搭换装与参考图复刻提示词专家。你会看到参考图、可能存在的生成人像垫图、以及用户上传的服饰商品图。你的核心任务是先把小红书参考图转换成具体画面文字，再把用户商品服饰融入这段画面，输出一整段最终成图 prompt。最终 prompt 必须直接描述最终图片本身，像在描述一张已经拍出来的照片，而不是描述任务规则。参考图负责提供完整画面模板，你必须具体写出参考图中真实可见的内容：场景地点、室内/室外环境、背景墙面/镜子/门框/家具/地面/道具、时间段、光线方向和质感、相机或手机拍摄方式、镜面自拍关系、机位高度、俯拍/平拍/仰拍程度、镜头向左或向右的水平偏转、景别、人物在画面中的位置和占比、裁切到哪里、人物坐姿/站姿/蹲姿、双腿和双脚的交叠方向、肩颈和躯干朝向、头部倾斜、手臂和手的位置、手机/包/椅子/凳子等道具与人物的接触关系，以及画面近处和远处的空间层级。商品图负责提供要替换上身或穿戴的服饰主体，最终 prompt 只需要说明商品服饰穿在对应部位，并描述它如何贴合参考图人物姿态、肩带/领口/腰线/裙摆/裤脚/袖口与动作和遮挡关系；商品外观细节以商品图为准，不要编造商品图里没有的设计。严禁输出“需要保留、必须复刻、参考图负责、商品图负责、不要改变、最终 prompt 必须”等任务说明式句子；严禁只写“保留参考图的场景和姿态”这种空话。你应该输出类似“一张真实手机镜前自拍照片，年轻女性坐在更衣室浅色墙面前的矮凳上……”这样的具体画面描述。不要擅自改性别、人数、景别、主体大小、坐站关系、镜面自拍方式或主要道具。画面必须像真实手机或相机拍摄，不要出现 CGI、3D 渲染、插画、海报合成或过度广告精修感。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
+    "defaultUserPrompt": "",
     "imageSize": "2K",
     "responseDataPath": "",
     "extraBody": {},
@@ -51,6 +57,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             self._send_json(200, {"ok": True})
+            return
+        if self.path.startswith("/generated/"):
+            self._send_generated_image()
             return
         self._send_json(404, {"error": "Not found"})
 
@@ -120,6 +129,21 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def _send_generated_image(self):
+        image_id = self.path.rsplit("/", 1)[-1].split("?", 1)[0]
+        item = GENERATED_IMAGES.get(image_id)
+        if not item:
+            self._send_json(404, {"error": "Generated image not found"})
+            return
+        raw = item["raw"]
+        self.send_response(200)
+        self._set_cors_headers()
+        self.send_header("Content-Type", item["content_type"])
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def _set_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Proxy-Token-B64")
@@ -180,6 +204,7 @@ def build_settings(body):
         else DEFAULTS["extraBody"],
         "userPrompt": body.get("userPrompt") or DEFAULTS["defaultUserPrompt"],
         "productSubjectHint": (body.get("productSubjectHint") or "").strip(),
+        "timings": [],
     }
 
 
@@ -202,6 +227,7 @@ def replicate_non_apparel(reference_data_url, product_data_url, settings, genera
         "analysisPrompt": "",
         "prompt": prompt,
         "imageRequestDebug": image_request_debug,
+        "timings": settings["timings"],
         "portraitPrompt": "",
         "portraitImageUrl": "",
         "referenceHasFace": False,
@@ -211,41 +237,61 @@ def replicate_non_apparel(reference_data_url, product_data_url, settings, genera
 
 def replicate_apparel(reference_data_url, product_data_url, settings, generation_path):
     reference_has_face, face_reason = detect_reference_face(reference_data_url, settings)
+    reference_description = describe_apparel_reference(reference_data_url, settings)
     portrait_prompt = ""
     portrait_image_url = ""
 
     if reference_has_face:
         portrait_prompt = compose_apparel_portrait_prompt(reference_data_url, settings)
-        portrait_image_url, _ = generate_image(portrait_prompt, settings, [])
+        portrait_image_url, _ = generate_image(
+            portrait_prompt, settings, [], localize_output=False
+        )
 
     final_prompt = compose_apparel_final_prompt(
         reference_data_url,
         product_data_url,
         portrait_image_url,
         reference_has_face,
+        reference_description,
         settings,
     )
-    # Final image generation only keeps the user product image as the direct image reference.
-    # The reference image and generated portrait only contribute through prompt construction.
+    final_reference_images = [product_data_url]
+    final_image_prompt = final_prompt
+    if portrait_image_url:
+        final_reference_images = [portrait_image_url, product_data_url]
+        final_image_prompt = (
+            f"{final_prompt}"
+            " 直接参考输入中第一张图片是模特人像垫图，必须尽量沿用人物脸部、体态、姿势和裁切；"
+            "第二张图片是用户上传的服饰商品图，必须把这件商品服饰穿到模特对应部位，服饰外观以第二张商品图为准。"
+        )
+    else:
+        final_image_prompt = (
+            f"{final_prompt}"
+            " 直接参考输入中的图片是用户上传的服饰商品图，必须把这件商品服饰穿到模特对应部位，服饰外观以该商品图为准。"
+        )
     try:
         result_image_url, image_request_debug = generate_image(
-            final_prompt, settings, [product_data_url]
+            final_image_prompt, settings, final_reference_images
         )
     except Exception as error:
         debug = build_image_request_debug_from_values(
-            settings["model"], build_image_config(settings["imageSize"]).get("image_config", {}), final_prompt, [product_data_url]
+            settings["model"], build_image_config(settings["imageSize"]).get("image_config", {}), final_image_prompt, final_reference_images
         )
         attach_debug_to_error(error, debug)
         raise
+    display_portrait_image_url = (
+        store_generated_image_if_needed(portrait_image_url) if portrait_image_url else ""
+    )
     return {
         "imageUrl": result_image_url,
-        "referenceAnalysisPrompt": "",
+        "referenceAnalysisPrompt": reference_description,
         "productAnalysisPrompt": "",
         "analysisPrompt": "",
         "prompt": final_prompt,
         "imageRequestDebug": image_request_debug,
+        "timings": settings["timings"],
         "portraitPrompt": portrait_prompt,
-        "portraitImageUrl": portrait_image_url,
+        "portraitImageUrl": display_portrait_image_url,
         "referenceHasFace": reference_has_face,
         "referenceFaceReason": face_reason,
         "generationPath": generation_path,
@@ -265,6 +311,8 @@ def classify_product_kind(product_data_url, settings):
         ],
         temperature=0,
         max_output_tokens=220,
+        timings=settings.get("timings"),
+        timing_label="kimi_product_classification",
     )
     data = parse_json_text(text)
     product_kind = normalize_generation_path(data.get("productKind"))
@@ -289,6 +337,8 @@ def detect_reference_face(reference_data_url, settings):
         ],
         temperature=0,
         max_output_tokens=180,
+        timings=settings.get("timings"),
+        timing_label="kimi_reference_face",
     )
     data = parse_json_text(text)
     has_face = bool(data.get("hasFace"))
@@ -327,6 +377,8 @@ def compose_non_apparel_prompt(reference_data_url, product_data_url, settings):
         ],
         temperature=0.2,
         max_output_tokens=1200,
+        timings=settings.get("timings"),
+        timing_label="kimi_non_apparel_prompt",
     )
     prompt = extract_final_prompt_text(text)
     if not prompt:
@@ -355,8 +407,42 @@ def compose_apparel_portrait_prompt(reference_data_url, settings):
         ],
         temperature=0.2,
         max_output_tokens=1000,
+        timings=settings.get("timings"),
+        timing_label="kimi_apparel_portrait_prompt",
     )
     return extract_final_prompt_text(text) or build_apparel_portrait_fallback(user_prompt)
+
+
+def describe_apparel_reference(reference_data_url, settings):
+    text = call_vision_model(
+        model=settings["visionModel"],
+        instructions=(
+            "你是一位小红书服饰参考图画面描述助手。"
+            "你只负责把参考图中真实可见的画面转成一整段中文描述，"
+            "用于后续复刻拍摄场景、构图、机位和人物姿态。"
+            "必须具体描述场景地点、背景墙面/镜子/门框/家具/地面/道具、"
+            "手机或镜面自拍关系、人物位置和占比、裁切、坐姿或站姿、四肢摆放、"
+            "手和手机/包/椅子等道具关系、拍摄角度、光线、色温和真实拍摄质感。"
+            "不要写任务说明，不要提商品图，不要说需要保留或复刻。"
+        ),
+        content=[
+            {"type": "input_image", "image_url": reference_data_url},
+            {
+                "type": "input_text",
+                "text": (
+                    "请把这张小红书参考图转成一段具体画面描述。"
+                    "只描述图中真实看到的内容，例如更衣室镜前自拍、坐在矮凳上、浅色墙面、木质门框、腿部交叠方向、手机遮住脸部等；"
+                    "如果图中不是这些元素，就按实际图像写。"
+                    "输出格式：REFERENCE_DESCRIPTION: 后面接一整段中文描述。"
+                ),
+            },
+        ],
+        temperature=0.1,
+        max_output_tokens=900,
+        timings=settings.get("timings"),
+        timing_label="kimi_apparel_reference_description",
+    )
+    return extract_reference_description_text(text)
 
 
 def compose_apparel_final_prompt(
@@ -364,6 +450,7 @@ def compose_apparel_final_prompt(
     product_data_url,
     portrait_image_url,
     reference_has_face,
+    reference_description,
     settings,
 ):
     subject_hint = settings.get("productSubjectHint", "")
@@ -376,7 +463,7 @@ def compose_apparel_final_prompt(
         {
             "type": "input_text",
             "text": (
-                "第一张图是参考图，只负责提供场景模板。"
+                "第一张图是用户在小红书想复刻的参考图，必须先把这张参考图转成具体画面描述，再写成最终成图 prompt。"
                 + (
                     "第二张图是已经生成好的模特人像垫图，必须尽量保留这张图里的脸、头发、体态和裁切；"
                     "第三张图是用户上传的服饰商品图。"
@@ -388,9 +475,12 @@ def compose_apparel_final_prompt(
                     if reference_has_face
                     else "参考图里没有可用人脸，因此最终图不需要先依赖人像垫图脸部一致性。"
                 )
+                + f"参考图画面描述：{reference_description or '请直接根据第一张参考图写出具体画面描述。'}"
                 + build_subject_hint_text(subject_hint)
                 + f"用户补充要求：{user_prompt}"
-                + "输出格式必须严格为：FINAL_PROMPT: 后面接一整段最终给生图模型使用的中文 prompt。"
+                + "请输出最终图片本身的画面描述，不要输出任务说明。不能出现“需要、必须、参考图、商品图、保留、复刻、不要改变、最终 prompt”等指令口吻词。"
+                + "必须把参考图中真实看见的场景和姿态具体写出来，例如更衣室镜前自拍、坐在矮凳上、浅色墙面和木质门框、腿部交叠方向、手机遮住脸部等；如果图中不是这些元素，就按实际图像写。"
+                + "输出格式必须严格为：FINAL_PROMPT: 后面接一整段最终给生图模型使用的中文画面描述。"
                 + "不要输出分析、推理、解释、标题、清单、Markdown 或 JSON。"
             ),
         }
@@ -401,22 +491,47 @@ def compose_apparel_final_prompt(
         content=content,
         temperature=0.2,
         max_output_tokens=1400,
+        timings=settings.get("timings"),
+        timing_label="kimi_apparel_final_prompt",
     )
-    return extract_final_prompt_text(text) or build_apparel_final_fallback(subject_hint, user_prompt, reference_has_face)
+    return extract_final_prompt_text(text) or build_apparel_final_fallback(
+        subject_hint,
+        user_prompt,
+        reference_has_face,
+        reference_description,
+    )
 
 
-def call_vision_model(model, instructions, content, temperature, max_output_tokens):
+def call_vision_model(
+    model,
+    instructions,
+    content,
+    temperature,
+    max_output_tokens,
+    timings=None,
+    timing_label="vision_model",
+):
     text, _ = call_vision_model_with_debug(
         model=model,
         instructions=instructions,
         content=content,
         temperature=temperature,
         max_output_tokens=max_output_tokens,
+        timings=timings,
+        timing_label=timing_label,
     )
     return text
 
 
-def call_vision_model_with_debug(model, instructions, content, temperature, max_output_tokens):
+def call_vision_model_with_debug(
+    model,
+    instructions,
+    content,
+    temperature,
+    max_output_tokens,
+    timings=None,
+    timing_label="vision_model",
+):
     payload = {
         "model": model,
         "messages": [
@@ -427,11 +542,13 @@ def call_vision_model_with_debug(model, instructions, content, temperature, max_
         "max_tokens": max_output_tokens,
         "reasoning": {"effort": "none", "exclude": True},
     }
+    started_at = time.monotonic()
     data = post_json(OPENROUTER_URL, payload)
+    append_timing(timings, timing_label, model, started_at)
     return extract_response_text(data), data
 
 
-def generate_image(prompt, settings, reference_images):
+def generate_image(prompt, settings, reference_images, localize_output=True):
     content = [{"type": "text", "text": prompt}]
     for ref in reference_images:
         if isinstance(ref, str) and ref:
@@ -445,18 +562,58 @@ def generate_image(prompt, settings, reference_images):
     payload = {
         "model": settings["model"],
         "messages": [{"role": "user", "content": content}],
-        "modalities": ["image", "text"],
+        "modalities": ["image"],
         "stream": False,
         **build_image_config(settings["imageSize"]),
         **settings["extraBody"],
     }
 
     image_request_debug = build_image_request_debug(payload, reference_images)
+    started_at = time.monotonic()
     data = post_json(OPENROUTER_URL, payload)
+    append_timing(settings.get("timings"), "image_generation", settings["model"], started_at)
     value = extract_image_output(data)
     if not isinstance(value, str) or not value:
         raise Exception("生图成功，但没有在 OpenRouter 响应里拿到图片结果。")
+    if localize_output:
+        value = store_generated_image_if_needed(value)
     return value, image_request_debug
+
+
+def append_timing(timings, label, model, started_at):
+    if not isinstance(timings, list):
+        return
+    timings.append(
+        {
+            "label": label,
+            "model": model,
+            "elapsedMs": int(round((time.monotonic() - started_at) * 1000)),
+        }
+    )
+
+
+def store_generated_image_if_needed(value):
+    if not isinstance(value, str) or not value.startswith("data:"):
+        return value
+    header, separator, encoded = value.partition(",")
+    if not separator:
+        return value
+    content_type = header.split(";", 1)[0].replace("data:", "") or "image/png"
+    try:
+        raw = base64.b64decode(encoded.encode("ascii"))
+    except Exception:
+        return value
+    image_id = f"{uuid.uuid4().hex}.png"
+    GENERATED_IMAGES[image_id] = {
+        "content_type": content_type,
+        "raw": raw,
+        "created_at": time.monotonic(),
+    }
+    GENERATED_IMAGE_ORDER.append(image_id)
+    while len(GENERATED_IMAGE_ORDER) > MAX_GENERATED_IMAGES:
+        stale_id = GENERATED_IMAGE_ORDER.pop(0)
+        GENERATED_IMAGES.pop(stale_id, None)
+    return f"http://127.0.0.1:{PORT}/generated/{image_id}"
 
 
 def convert_image_url_to_data_url(image_url):
@@ -475,25 +632,33 @@ def convert_image_url_to_data_url(image_url):
 
 
 def post_json(url, payload):
-    request = Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "http://127.0.0.1:8787",
-            "X-Title": "Commerce Creative Replicator",
-        },
-        method="POST",
-    )
-    try:
-        with urlopen(request) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except HTTPError as error:
-        text = error.read().decode("utf-8", errors="ignore")
-        raise Exception(format_openrouter_error(error.code, text))
-    except URLError as error:
-        raise Exception(f"OpenRouter 请求失败: {error.reason}")
+    raw_body = json.dumps(payload).encode("utf-8")
+    last_error = None
+    for attempt in range(3):
+        request = Request(
+            url,
+            data=raw_body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "HTTP-Referer": "http://127.0.0.1:8787",
+                "X-Title": "Commerce Creative Replicator",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=180) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as error:
+            text = error.read().decode("utf-8", errors="ignore")
+            raise Exception(format_openrouter_error(error.code, text))
+        except (IncompleteRead, RemoteDisconnected, TimeoutError) as error:
+            last_error = error
+        except URLError as error:
+            last_error = error
+        if attempt < 2:
+            time.sleep(1.5 * (attempt + 1))
+    raise Exception(format_transient_openrouter_error(last_error))
 
 
 def extract_response_text(data):
@@ -556,6 +721,25 @@ def extract_final_prompt_text(text):
     if cleaned.startswith(("\"", "'")) and cleaned.endswith(("\"", "'")):
         cleaned = cleaned[1:-1].strip()
     return cleaned
+
+
+def extract_reference_description_text(text):
+    if not isinstance(text, str):
+        return ""
+    cleaned = strip_code_fences(text).strip()
+    markers = (
+        "REFERENCE_DESCRIPTION:",
+        "REFERENCE_DESCRIPTION：",
+        "参考图画面描述：",
+        "参考图画面描述:",
+        "画面描述：",
+        "画面描述:",
+    )
+    for marker in markers:
+        if marker in cleaned:
+            cleaned = cleaned.split(marker, 1)[1].strip()
+            break
+    return strip_code_fences(cleaned).strip()
 
 
 def extract_image_output(data):
@@ -854,6 +1038,19 @@ def format_openrouter_error(status_code, text):
     return f"OpenRouter 请求失败 ({status_code})：{detail}"
 
 
+def format_transient_openrouter_error(error):
+    if isinstance(error, IncompleteRead):
+        return (
+            "OpenRouter 响应读取中断，已自动重试但仍未完成。"
+            f"最后一次只读取到 {len(error.partial or b'')} bytes。请稍后再试。"
+        )
+    if isinstance(error, URLError):
+        return f"OpenRouter 网络连接不稳定，已自动重试但仍失败：{error.reason}"
+    if error:
+        return f"OpenRouter 网络连接不稳定，已自动重试但仍失败：{error}"
+    return "OpenRouter 网络连接不稳定，已自动重试但仍失败。"
+
+
 def build_subject_hint_text(subject_hint):
     if not subject_hint:
         return "如果商品图里有其他干扰元素，请优先锁定真正的商品主体。"
@@ -883,17 +1080,29 @@ def build_apparel_portrait_fallback(user_prompt):
     )
 
 
-def build_apparel_final_fallback(subject_hint, user_prompt, reference_has_face):
+def build_apparel_final_fallback(
+    subject_hint,
+    user_prompt,
+    reference_has_face,
+    reference_description="",
+):
     portrait_text = (
         "尽量沿用生成人像里的脸、发型、体态和裁切方式，"
         if reference_has_face
         else ""
     )
     subject_text = f"商品主体是{subject_hint}。" if subject_hint else "商品主体以商品图为准。"
+    reference_text = (
+        f"{reference_description}"
+        if reference_description
+        else (
+            "一张真实服饰穿搭照片，人物处在参考图相同的场景、背景、机位、景别、姿态、裁切和光线关系中。"
+        )
+    )
     return (
-        "保留参考图的场景地点、时间段、背景布局、光影关系、镜头角度、景别、主体占比、动作姿态、手部位置和裁切方式，"
+        f"{reference_text}"
         f"{portrait_text}"
-        "把用户上传的服饰自然穿在模特对应部位，只替换服饰主体，不改变人物性别、人数和出镜方式。"
+        "把用户上传的服饰自然穿在模特对应部位，让领口、肩带、袖口、腰线、裙摆、裤脚等跟随参考图人物动作和遮挡关系，只替换服饰主体，不改变人物性别、人数、出镜方式、主要姿态和主要道具。"
         f"{subject_text}"
         f"附加要求：{user_prompt}"
     )
