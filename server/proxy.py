@@ -18,13 +18,15 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 GENERATED_IMAGES = {}
 GENERATED_IMAGE_ORDER = []
 MAX_GENERATED_IMAGES = 20
+PROGRESS_JOBS = {}
+PROGRESS_JOB_ORDER = []
+MAX_PROGRESS_JOBS = 50
 
 DEFAULTS = {
     "model": "openai/gpt-5.4-image-2",
     "visionModel": "moonshotai/kimi-k2.6",
     "nonApparelPrompt": "你是一位真实商品摄影与非服饰商品复刻提示词专家。你会同时看到一张参考图和一张商品图。你的任务是把两张图转成一段最终可以直接交给生图模型的中文 prompt，让生图模型生成一张“用户商品主体正确，但摄影语言和参考图高度一致”的真实拍摄效果图片。参考图只负责提供画面模板，你必须像摄影师复盘机位一样，准确识别并继承参考图里的画幅比例、景别、镜头焦段感、相机高度、俯拍/平拍/仰拍程度、镜头向左或向右的水平偏转、画面近端和远端的位置、透视收缩方向、水平线或盒边/桌边的斜率、主体在画面中的位置和占比、主体朝向、主体长轴方向、主体倾斜角度、主体俯仰角度、主体与承载面的接触点、主体是否平放/斜放/竖立/悬浮/倚靠/嵌入卡槽/半露出/叠放/被托起、多个物体之间的前后层级和遮挡关系、主体边缘与画面边界的距离、裁切方式、场景地点、背景元素、承载面材质、时间段、主光方向、光线质感、色温、曝光方式、色彩氛围、景深关系、主体与背景的光影关系，以及画面中原本存在的真实陈列和生活痕迹。最终 prompt 必须明确写出相机视角：例如低角度贴近桌面、从正前方略偏右看向左后方、从上方约 30 度俯视、镜头沿盒子对角线方向拍摄、近处盒沿在画面底部横向穿过、远处盒盖向右上方退去等；不要只写“微距特写、低角度俯拍”这种笼统词。最终 prompt 还必须用具体方位写清楚新商品的摆放姿势：它位于画面哪个区域，长轴或开口朝向哪里，正面/侧面/顶部露出多少，是否贴着、压在、嵌入、悬在、靠着或插入某个承载物，接触点在哪里，阴影落向哪里；如果参考图中原主体有专用托槽、盒垫、支架、桌面边缘、布面褶皱或局部遮挡，必须让新商品占用同一个空间关系。商品图会直接作为后续生图模型的唯一商品参考图，因此最终 prompt 里不要详细描述商品本身的颜色、材质、品牌、logo、文字、纹理、形状、结构、链节、刻字、装饰、边缘、工艺、尺寸等视觉细节，这些交给图像参考通道。你只能极简点明商品品类和融入方式，例如“一枚戒指嵌在盒垫中央的卡槽里，弧面横向朝向镜头，镜头从盒子前下方略偏右的位置沿盒内对角线看过去”“一个包斜靠在桌面右后方”“一瓶香水竖立在原主体落点”。最终输出必须是一整段中文 prompt，直接描述最终生成图片本身：保留参考图的场景、构图、镜头角度、主体摆放姿态、主体朝向、主体落点、前后层级、光影、景别、主体大小和整体气质，画面必须像真实相机拍摄，不要出现 CGI、3D 渲染、插画、海报合成或过度广告精修感。不要输出解释、标题、分析过程、分点或 JSON。",
-    "apparelPortraitPrompt": "你是一位电商服饰模特设定提示词专家。你会看到一张参考图，这张图只用来生成一张新的模特人像垫图，后续再把用户的服饰商品替换上去。你的任务是只根据参考图输出一整段中文生图 prompt，用于先生成一张与参考图人物气质、性别、年龄感、脸型、发型长度、发色、妆容浓度、视线方向、头部倾斜、身体朝向、动作姿态、镜头角度、景别、主体占比、裁切方式、场景地点、时间段、背景布局、色彩氛围、光影关系都尽量相似的模特人像图片。你必须保留参考图的人像出镜形式和构图骨架，但要让模特穿着尽量简洁、干净、贴身、低干扰的基础内搭或无明显设计感的占位服装，避免外套、复杂印花、大面积文字、夸张配饰和抢主体的服装细节，以便后续服饰替换。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
-    "apparelFinalPrompt": "你是一位真实服饰摄影、穿搭换装与参考图复刻提示词专家。你会看到参考图、可能存在的生成人像垫图、以及用户上传的服饰商品图。你的核心任务是先把小红书参考图转换成具体画面文字，再把用户商品服饰融入这段画面，输出一整段最终成图 prompt。最终 prompt 必须直接描述最终图片本身，像在描述一张已经拍出来的照片，而不是描述任务规则。参考图负责提供完整画面模板，你必须具体写出参考图中真实可见的内容：场景地点、室内/室外环境、背景墙面/镜子/门框/家具/地面/道具、时间段、光线方向和质感、相机或手机拍摄方式、镜面自拍关系、机位高度、俯拍/平拍/仰拍程度、镜头向左或向右的水平偏转、景别、人物在画面中的位置和占比、裁切到哪里、人物坐姿/站姿/蹲姿、双腿和双脚的交叠方向、肩颈和躯干朝向、头部倾斜、手臂和手的位置、手机/包/椅子/凳子等道具与人物的接触关系，以及画面近处和远处的空间层级。商品图负责提供要替换上身或穿戴的服饰主体，最终 prompt 只需要说明商品服饰穿在对应部位，并描述它如何贴合参考图人物姿态、肩带/领口/腰线/裙摆/裤脚/袖口与动作和遮挡关系；商品外观细节以商品图为准，不要编造商品图里没有的设计。严禁输出“需要保留、必须复刻、参考图负责、商品图负责、不要改变、最终 prompt 必须”等任务说明式句子；严禁只写“保留参考图的场景和姿态”这种空话。你应该输出类似“一张真实手机镜前自拍照片，年轻女性坐在更衣室浅色墙面前的矮凳上……”这样的具体画面描述。不要擅自改性别、人数、景别、主体大小、坐站关系、镜面自拍方式或主要道具。画面必须像真实手机或相机拍摄，不要出现 CGI、3D 渲染、插画、海报合成或过度广告精修感。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
+    "apparelFinalPrompt": "你是一位真实服饰摄影、穿搭换装与参考图复刻提示词专家。你会看到小红书参考图和用户上传的服饰商品图。你的核心任务是先把小红书参考图转换成具体画面文字，再把用户商品服饰融入这段画面，输出一整段最终成图 prompt。最终 prompt 必须直接描述最终图片本身，像在描述一张已经拍出来的照片，而不是描述任务规则。参考图负责提供完整画面模板和人物模板，你必须具体写出参考图中真实可见的内容：人物形象气质、发型、脸部可见状态、视线、头部倾斜、身体朝向、动作姿态、手臂和手的位置、场景地点、室内/室外环境、背景墙面/镜子/门框/家具/地面/道具、时间段、光线方向和质感、相机或手机拍摄方式、镜面自拍关系、机位高度、俯拍/平拍/仰拍程度、镜头向左或向右的水平偏转、景别、人物在画面中的位置和占比、人物主要位于画面上部/中部/下部还是贯穿全画面、人物头顶/脚底/左右身体边缘距离画面边界的大致比例、人物高度占画面高度的大致比例、画面上下左右留白和主要背景区域的大致比例、画面四边分别裁到人物/服饰/道具哪里、哪些身体部位和服饰部件完整可见/局部可见/完全不可见、人物坐姿/站姿/蹲姿、可见四肢和双脚的方向、肩颈和躯干朝向、手机/包/椅子/凳子等道具与人物的接触关系，以及画面近处和远处的空间层级。最终 prompt 必须保持参考图的人物形象方向、姿势、手势、垂直位置、主体大小、上下留白、左右留白、边界距离和可见范围，不要为了突出服装而自动放大人物、缩小人物、居中人物、移动镜头、扩展画幅、补全身体、补全道具或改变画面重心。无论参考图是不展示脚、不展示腿、不展示下半身、不展示躯干、不展示头部、只露出局部身体、只露出局部商品还是裁掉某个道具，最终 prompt 都必须写成同样的局部可见范围；参考图中完全不可见的身体部位、服饰部件、配饰、道具和背景区域不能出现在最终 prompt 中。商品图只负责提供要替换上身或穿戴的服饰主体本身，最终 prompt 只需要说明商品服饰穿在参考图人物对应部位，并描述它如何贴合参考图人物姿态、肩带/领口/腰线/裙摆/裤脚/袖口与动作和遮挡关系；商品外观细节以商品图为准，不要编造商品图里没有的设计。参考图里人物原本穿着的衣服、鞋帽、包袋和配饰不是本次商品，不能保留或复述参考图原服饰的颜色、图案、数字、logo、文字、玩偶、装饰、面料和款式；参考图原服饰只用于判断身体遮挡、衣物边缘落点、可见范围和裁切位置，最终可见服饰外观必须来自商品图。如果商品图中也出现真人、模特、手臂、脸、身体、发型、妆容、背景、道具或强动作，它们都不是人物模板和画面模板，不能写进最终 prompt，也不能覆盖参考图的人物形象、脸、发型、体态、人物姿势、手部位置、身体朝向、场景、拍摄角度、构图和可见范围；只能从商品图提取服饰本身的款式、廓形、颜色、图案、材质、开合、肩带、领口、袖长、下摆、裤脚、鞋型或帽型等穿着外观。严禁输出“需要保留、必须复刻、参考图负责、商品图负责、不要改变、最终 prompt 必须”等任务说明式句子；严禁只写“保留参考图的场景和姿态”这种空话。你应该输出类似“一张真实手机镜前自拍照片，年轻女性坐在更衣室浅色墙面前的矮凳上……”这样的具体画面描述。不要擅自改性别、人数、景别、主体大小、坐站关系、镜面自拍方式、人物在画面中的垂直位置、上下留白比例、可见范围或主要道具。画面必须像真实手机或相机拍摄，不要出现 CGI、3D 渲染、插画、海报合成或过度广告精修感。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
     "defaultUserPrompt": "",
     "imageSize": "2K",
     "responseDataPath": "",
@@ -57,6 +59,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             self._send_json(200, {"ok": True})
+            return
+        if self.path.startswith("/progress/"):
+            self._send_progress()
             return
         if self.path.startswith("/generated/"):
             self._send_generated_image()
@@ -144,6 +149,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _send_progress(self):
+        progress_id = self.path.rsplit("/", 1)[-1].split("?", 1)[0]
+        item = PROGRESS_JOBS.get(progress_id)
+        if not item:
+            self._send_json(404, {"error": "Progress not found"})
+            return
+        self._send_json(200, item)
+
     def _set_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Proxy-Token-B64")
@@ -176,16 +189,26 @@ def replicate(body):
         raise error
 
     settings = build_settings(body)
+    init_progress(settings, body.get("progressId"), body.get("generationPath"))
     reference_data_url = convert_image_url_to_data_url(image_url)
     product_data_url = normalize_data_url(product_image_data_url)
 
     generation_path = normalize_generation_path(body.get("generationPath"))
     if not generation_path:
         generation_path, _ = classify_product_kind(product_data_url, settings)
+    settings["generationPath"] = generation_path
+    init_progress(settings, settings.get("progressId"), generation_path)
 
-    if generation_path == "apparel":
-        return replicate_apparel(reference_data_url, product_data_url, settings, generation_path)
-    return replicate_non_apparel(reference_data_url, product_data_url, settings, generation_path)
+    try:
+        if generation_path == "apparel":
+            result = replicate_apparel(reference_data_url, product_data_url, settings, generation_path)
+        else:
+            result = replicate_non_apparel(reference_data_url, product_data_url, settings, generation_path)
+        set_progress(settings, 999, "生成完成", status="done")
+        return result
+    except Exception:
+        set_progress(settings, None, "生成失败", status="error")
+        raise
 
 
 def build_settings(body):
@@ -193,8 +216,6 @@ def build_settings(body):
         "model": body.get("model") or DEFAULTS["model"],
         "visionModel": body.get("visionModel") or DEFAULTS["visionModel"],
         "nonApparelPrompt": body.get("nonApparelPrompt") or DEFAULTS["nonApparelPrompt"],
-        "apparelPortraitPrompt": body.get("apparelPortraitPrompt")
-        or DEFAULTS["apparelPortraitPrompt"],
         "apparelFinalPrompt": body.get("apparelFinalPrompt") or DEFAULTS["apparelFinalPrompt"],
         "defaultUserPrompt": body.get("defaultUserPrompt") or DEFAULTS["defaultUserPrompt"],
         "imageSize": body.get("imageSize") or DEFAULTS["imageSize"],
@@ -205,11 +226,15 @@ def build_settings(body):
         "userPrompt": body.get("userPrompt") or DEFAULTS["defaultUserPrompt"],
         "productSubjectHint": (body.get("productSubjectHint") or "").strip(),
         "timings": [],
+        "progressId": body.get("progressId") or "",
+        "generationPath": normalize_generation_path(body.get("generationPath")),
     }
 
 
 def replicate_non_apparel(reference_data_url, product_data_url, settings, generation_path):
+    set_progress(settings, 0, "正在分析参考图并融合商品约束")
     prompt = compose_non_apparel_prompt(reference_data_url, product_data_url, settings)
+    set_progress(settings, 1, "Prompt 已生成，正在调用生图模型")
     try:
         result_image_url, image_request_debug = generate_image(
             prompt, settings, [product_data_url]
@@ -228,47 +253,34 @@ def replicate_non_apparel(reference_data_url, product_data_url, settings, genera
         "prompt": prompt,
         "imageRequestDebug": image_request_debug,
         "timings": settings["timings"],
-        "portraitPrompt": "",
-        "portraitImageUrl": "",
         "referenceHasFace": False,
         "generationPath": generation_path,
     }
 
 
 def replicate_apparel(reference_data_url, product_data_url, settings, generation_path):
-    reference_has_face, face_reason = detect_reference_face(reference_data_url, settings)
-    reference_description = describe_apparel_reference(reference_data_url, settings)
-    portrait_prompt = ""
-    portrait_image_url = ""
-
-    if reference_has_face:
-        portrait_prompt = compose_apparel_portrait_prompt(reference_data_url, settings)
-        portrait_image_url, _ = generate_image(
-            portrait_prompt, settings, [], localize_output=False
-        )
-
+    set_progress(settings, 0, "正在分析参考图")
+    reference_analysis = analyze_apparel_reference(reference_data_url, settings)
+    set_progress(settings, 1, "参考图分析完成")
+    reference_has_face = reference_analysis["hasFace"]
+    face_reason = reference_analysis["reason"]
+    reference_description = reference_analysis["referenceDescription"]
+    set_progress(settings, 1, "正在融合参考图和商品服饰约束")
     final_prompt = compose_apparel_final_prompt(
         reference_data_url,
         product_data_url,
-        portrait_image_url,
         reference_has_face,
         reference_description,
         settings,
     )
+    set_progress(settings, 2, "最终 Prompt 已生成，正在调用生图模型")
     final_reference_images = [product_data_url]
-    final_image_prompt = final_prompt
-    if portrait_image_url:
-        final_reference_images = [portrait_image_url, product_data_url]
-        final_image_prompt = (
-            f"{final_prompt}"
-            " 直接参考输入中第一张图片是模特人像垫图，必须尽量沿用人物脸部、体态、姿势和裁切；"
-            "第二张图片是用户上传的服饰商品图，必须把这件商品服饰穿到模特对应部位，服饰外观以第二张商品图为准。"
-        )
-    else:
-        final_image_prompt = (
-            f"{final_prompt}"
-            " 直接参考输入中的图片是用户上传的服饰商品图，必须把这件商品服饰穿到模特对应部位，服饰外观以该商品图为准。"
-        )
+    final_image_prompt = (
+        f"{final_prompt}"
+        " 直接参考输入中的图片只有用户上传的服饰商品图，只作为服饰外观参考，必须把这件商品服饰穿到 prompt 描述的人物对应部位。"
+        "不要把商品图里的人物、手臂、脸、发型、身体比例、背景、道具或强动作当成最终人物形象和姿势；"
+        "最终人物形象、姿势、手势、场景、机位和构图只能来自文字 prompt 中对小红书参考图的描述。"
+    )
     try:
         result_image_url, image_request_debug = generate_image(
             final_image_prompt, settings, final_reference_images
@@ -279,9 +291,6 @@ def replicate_apparel(reference_data_url, product_data_url, settings, generation
         )
         attach_debug_to_error(error, debug)
         raise
-    display_portrait_image_url = (
-        store_generated_image_if_needed(portrait_image_url) if portrait_image_url else ""
-    )
     return {
         "imageUrl": result_image_url,
         "referenceAnalysisPrompt": reference_description,
@@ -290,8 +299,6 @@ def replicate_apparel(reference_data_url, product_data_url, settings, generation
         "prompt": final_prompt,
         "imageRequestDebug": image_request_debug,
         "timings": settings["timings"],
-        "portraitPrompt": portrait_prompt,
-        "portraitImageUrl": display_portrait_image_url,
         "referenceHasFace": reference_has_face,
         "referenceFaceReason": face_reason,
         "generationPath": generation_path,
@@ -324,29 +331,48 @@ def classify_product_kind(product_data_url, settings):
     return product_kind, str(data.get("reason") or "").strip()
 
 
-def detect_reference_face(reference_data_url, settings):
+def analyze_apparel_reference(reference_data_url, settings):
     text = call_vision_model(
         model=settings["visionModel"],
-        instructions=REFERENCE_FACE_PROMPT,
+        instructions=(
+            "你是一位小红书服饰参考图分析助手。你只分析这一张参考图，并输出 JSON。"
+            "你需要同时判断图中是否有清晰、足够大、适合在最终图里作为人物形象参考的人脸，"
+            "并把参考图中真实可见的画面转成一整段中文描述，用于后续复刻拍摄场景、构图、机位和人物姿态。"
+            "画面描述必须具体包含场景地点、背景墙面/镜子/门框/家具/地面/道具、手机或镜面自拍关系、"
+            "人物位置和占比、人物主要处于画面的上部/中部/下部还是贯穿全画面、人物头顶和脚底到画面边界的距离、人物高度占画面高度的大致比例、"
+            "画面上下左右留白和主要背景区域比例、画面四边分别裁到人物/服饰/道具哪里、哪些身体部位和服饰部件完整可见/局部可见/完全不可见、坐姿或站姿、四肢摆放、手和手机/包/椅子等道具关系、拍摄角度、光线、色温和真实拍摄质感。"
+            "只输出 JSON，不要 Markdown。"
+        ),
         content=[
             {"type": "input_image", "image_url": reference_data_url},
             {
                 "type": "input_text",
-                "text": "只判断参考图里是否有清晰、足够大、适合做人像垫图的人脸。只输出 JSON。",
+                "text": (
+                    "请输出 JSON："
+                    "{\"hasFace\": boolean, \"reason\": \"人脸判断原因\", \"referenceDescription\": \"参考图具体画面描述\"}。"
+                    "hasFace 只有当真人脸部清晰、足够大、五官大部分可辨认、适合最终图沿用人物形象时才为 true；"
+                    "如果脸太小、严重遮挡、背脸、极端模糊、插画或海报里的脸，都为 false。"
+                ),
             },
         ],
         temperature=0,
-        max_output_tokens=180,
+        max_output_tokens=1100,
         timings=settings.get("timings"),
-        timing_label="kimi_reference_face",
+        timing_label="kimi_apparel_reference_analysis",
     )
     data = parse_json_text(text)
     has_face = bool(data.get("hasFace"))
-    reason = str(data.get("reason") or "").strip()
     if not isinstance(data.get("hasFace"), bool):
         lowered = text.lower()
         has_face = '"hasface": true' in lowered or '"hasface":true' in lowered
-    return has_face, reason
+    reference_description = str(data.get("referenceDescription") or "").strip()
+    if not reference_description:
+        reference_description = extract_reference_description_text(text)
+    return {
+        "hasFace": has_face,
+        "reason": str(data.get("reason") or "").strip(),
+        "referenceDescription": reference_description,
+    }
 
 
 def compose_non_apparel_prompt(reference_data_url, product_data_url, settings):
@@ -386,69 +412,9 @@ def compose_non_apparel_prompt(reference_data_url, product_data_url, settings):
     return prompt
 
 
-def compose_apparel_portrait_prompt(reference_data_url, settings):
-    user_prompt = settings.get("userPrompt", "").strip() or DEFAULTS["defaultUserPrompt"]
-    text = call_vision_model(
-        model=settings["visionModel"],
-        instructions=settings["apparelPortraitPrompt"],
-        content=[
-            {"type": "input_image", "image_url": reference_data_url},
-            {
-                "type": "input_text",
-                "text": (
-                    "这张参考图将只用于先生成一张模特人像垫图。"
-                    "请保留人物气质、姿态、场景、机位、景别、裁切和光影关系，"
-                    "但让模特穿着简洁低干扰的占位基础款，为后续服饰替换留出空间。"
-                    f"用户补充要求：{user_prompt}"
-                    "输出格式必须严格为：FINAL_PROMPT: 后面接一整段最终给生图模型使用的中文 prompt。"
-                    "不要输出分析、推理、解释、标题、清单、Markdown 或 JSON。"
-                ),
-            },
-        ],
-        temperature=0.2,
-        max_output_tokens=1000,
-        timings=settings.get("timings"),
-        timing_label="kimi_apparel_portrait_prompt",
-    )
-    return extract_final_prompt_text(text) or build_apparel_portrait_fallback(user_prompt)
-
-
-def describe_apparel_reference(reference_data_url, settings):
-    text = call_vision_model(
-        model=settings["visionModel"],
-        instructions=(
-            "你是一位小红书服饰参考图画面描述助手。"
-            "你只负责把参考图中真实可见的画面转成一整段中文描述，"
-            "用于后续复刻拍摄场景、构图、机位和人物姿态。"
-            "必须具体描述场景地点、背景墙面/镜子/门框/家具/地面/道具、"
-            "手机或镜面自拍关系、人物位置和占比、裁切、坐姿或站姿、四肢摆放、"
-            "手和手机/包/椅子等道具关系、拍摄角度、光线、色温和真实拍摄质感。"
-            "不要写任务说明，不要提商品图，不要说需要保留或复刻。"
-        ),
-        content=[
-            {"type": "input_image", "image_url": reference_data_url},
-            {
-                "type": "input_text",
-                "text": (
-                    "请把这张小红书参考图转成一段具体画面描述。"
-                    "只描述图中真实看到的内容，例如更衣室镜前自拍、坐在矮凳上、浅色墙面、木质门框、腿部交叠方向、手机遮住脸部等；"
-                    "如果图中不是这些元素，就按实际图像写。"
-                    "输出格式：REFERENCE_DESCRIPTION: 后面接一整段中文描述。"
-                ),
-            },
-        ],
-        temperature=0.1,
-        max_output_tokens=900,
-        timings=settings.get("timings"),
-        timing_label="kimi_apparel_reference_description",
-    )
-    return extract_reference_description_text(text)
-
-
 def compose_apparel_final_prompt(
     reference_data_url,
     product_data_url,
-    portrait_image_url,
     reference_has_face,
     reference_description,
     settings,
@@ -456,25 +422,22 @@ def compose_apparel_final_prompt(
     subject_hint = settings.get("productSubjectHint", "")
     user_prompt = settings.get("userPrompt", "").strip() or DEFAULTS["defaultUserPrompt"]
     content = [{"type": "input_image", "image_url": reference_data_url}]
-    if portrait_image_url:
-        content.append({"type": "input_image", "image_url": portrait_image_url})
     content.append({"type": "input_image", "image_url": product_data_url})
     content.append(
         {
             "type": "input_text",
             "text": (
                 "第一张图是用户在小红书想复刻的参考图，必须先把这张参考图转成具体画面描述，再写成最终成图 prompt。"
+                + "第二张图是用户上传的服饰商品图，只用于识别服饰本身。"
                 + (
-                    "第二张图是已经生成好的模特人像垫图，必须尽量保留这张图里的脸、头发、体态和裁切；"
-                    "第三张图是用户上传的服饰商品图。"
-                    if portrait_image_url
-                    else "第二张图是用户上传的服饰商品图。"
-                )
-                + (
-                    "参考图里有人脸，所以最终图必须尽量沿用人像垫图作为模特基础。"
+                    "参考图里有人脸，所以最终图必须尽量沿用第一张参考图里的人物形象、脸部可见状态、发型、气质、体态、动作和裁切。"
                     if reference_has_face
-                    else "参考图里没有可用人脸，因此最终图不需要先依赖人像垫图脸部一致性。"
+                    else "参考图里没有可用人脸，因此最终图不需要强求脸部一致，但仍必须沿用第一张参考图的人物姿态、身体朝向、裁切、场景和构图。"
                 )
+                + "第一张参考图里人物原本穿着的衣服、鞋帽、包袋和配饰不是本次要生成的商品，不能把参考图原服饰的颜色、图案、数字、logo、文字、玩偶、装饰、面料和款式写进最终 prompt；参考图原服饰只允许用于判断身体遮挡、领口/袖口/下摆落点、衣物与手臂/包/头发的接触关系、可见范围和裁切位置。"
+                + "最终画面中所有需要替换或新增的服饰外观，都必须来自第二张商品图；如果最终 prompt 描述了参考图原服饰外观，就会导致错误。"
+                + "服饰商品图如果包含真人、模特、手臂动作、手部位置、脸、发型、妆容、身体比例、背景、道具、拍摄角度或构图，这些都不能作为最终画面的人物形象、姿势和场景依据；只提取服饰本身的款式、廓形、颜色、图案、材质、开合、肩带、领口、袖长、下摆、裤脚、鞋型或帽型，并让服饰服从第一张参考图里的动作、手势、遮挡和裁切关系。"
+                + "最终 prompt 必须明确写出画面四边裁到哪里，以及哪些身体部位、服饰部件、配饰、道具或背景区域是完整可见、局部可见或完全不可见；第一张参考图中完全不可见的内容不要写进最终画面描述，也不要让生图模型补全这些画外内容。"
                 + f"参考图画面描述：{reference_description or '请直接根据第一张参考图写出具体画面描述。'}"
                 + build_subject_hint_text(subject_hint)
                 + f"用户补充要求：{user_prompt}"
@@ -590,6 +553,92 @@ def append_timing(timings, label, model, started_at):
             "elapsedMs": int(round((time.monotonic() - started_at) * 1000)),
         }
     )
+
+
+def init_progress(settings, progress_id, generation_path):
+    if not progress_id:
+        return
+    generation_path = normalize_generation_path(generation_path) or settings.get("generationPath") or ""
+    steps = progress_steps_for_path(generation_path)
+    if not steps:
+        return
+    if progress_id not in PROGRESS_JOBS:
+        PROGRESS_JOB_ORDER.append(progress_id)
+    PROGRESS_JOBS[progress_id] = {
+        "ok": True,
+        "id": progress_id,
+        "status": "running",
+        "generationPath": generation_path,
+        "activeIndex": 0,
+        "message": steps[0]["title"],
+        "steps": steps,
+        "updatedAt": time.time(),
+    }
+    while len(PROGRESS_JOB_ORDER) > MAX_PROGRESS_JOBS:
+        stale_id = PROGRESS_JOB_ORDER.pop(0)
+        PROGRESS_JOBS.pop(stale_id, None)
+
+
+def set_progress(settings, active_index, message, status="running"):
+    progress_id = settings.get("progressId")
+    if not progress_id:
+        return
+    item = PROGRESS_JOBS.get(progress_id)
+    if not item:
+        init_progress(settings, progress_id, settings.get("generationPath"))
+        item = PROGRESS_JOBS.get(progress_id)
+    if not item:
+        return
+    steps = item.get("steps") or []
+    if active_index == 999:
+        active_index = max(0, len(steps) - 1)
+    elif active_index is None:
+        active_index = int(item.get("activeIndex") or 0)
+    else:
+        active_index = max(0, min(int(active_index), max(0, len(steps) - 1)))
+    item.update(
+        {
+            "status": status,
+            "activeIndex": active_index,
+            "message": message,
+            "updatedAt": time.time(),
+        }
+    )
+
+
+def progress_steps_for_path(generation_path):
+    if generation_path == "apparel":
+        return [
+            {
+                "title": "分析参考图",
+                "detail": "Kimi 读取小红书参考图，提取人物形象、场景、姿势和构图。",
+                "progress": 25,
+            },
+            {
+                "title": "融合服饰约束",
+                "detail": "Kimi 写最终服饰换装 Prompt，商品图只提供服饰外观。",
+                "progress": 55,
+            },
+            {
+                "title": "生成最终图片",
+                "detail": "最终 Prompt 返回后，参考图约束人物和场景，商品图只约束服饰。",
+                "progress": 88,
+            },
+        ]
+    if generation_path == "non_apparel":
+        return [
+            {
+                "title": "生成复刻 Prompt",
+                "detail": "Kimi 分析参考图的场景、机位、光线和商品摆放关系。",
+                "progress": 35,
+            },
+            {
+                "title": "生成最终图片",
+                "detail": "Prompt 返回后，调用生图模型输出结果图。",
+                "progress": 84,
+            },
+        ]
+    return []
 
 
 def store_generated_image_if_needed(value):
@@ -1032,7 +1081,7 @@ def format_openrouter_error(status_code, text):
         return (
             "当前 OpenRouter 图像提供方拒绝了这次请求。"
             "这通常不是代码问题，而是模型提供方不允许当前这类图片编辑/人物换装/参考图改写请求。"
-            "如果你继续用 gpt-5.4-image-2，建议先改成纯文生图；"
+            "如果你继续用当前生图模型，建议先改成纯文生图；"
             "如果你要保留商品参考图和换装链路，建议换一个更适合 image-to-image 的生图模型。"
         )
     return f"OpenRouter 请求失败 ({status_code})：{detail}"
@@ -1071,15 +1120,6 @@ def build_non_apparel_safe_fallback(subject_hint, user_prompt):
     )
 
 
-def build_apparel_portrait_fallback(user_prompt):
-    return (
-        "生成一张与参考图人物出镜方式、场景、机位、景别、姿态、光影关系和整体氛围尽量一致的模特人像图片，"
-        "保留相近的性别、年龄感、发型、表情和裁切方式，"
-        "但让模特穿着简洁低干扰的基础占位服装，不要使用复杂印花、大面积文字或抢主体的外搭。"
-        f"附加要求：{user_prompt}"
-    )
-
-
 def build_apparel_final_fallback(
     subject_hint,
     user_prompt,
@@ -1087,9 +1127,9 @@ def build_apparel_final_fallback(
     reference_description="",
 ):
     portrait_text = (
-        "尽量沿用生成人像里的脸、发型、体态和裁切方式，"
+        "尽量沿用参考图里的脸、发型、体态、人物姿势、手势和裁切方式，"
         if reference_has_face
-        else ""
+        else "沿用参考图里的人物姿态、身体朝向、手势、裁切和构图，"
     )
     subject_text = f"商品主体是{subject_hint}。" if subject_hint else "商品主体以商品图为准。"
     reference_text = (
@@ -1102,7 +1142,7 @@ def build_apparel_final_fallback(
     return (
         f"{reference_text}"
         f"{portrait_text}"
-        "把用户上传的服饰自然穿在模特对应部位，让领口、肩带、袖口、腰线、裙摆、裤脚等跟随参考图人物动作和遮挡关系，只替换服饰主体，不改变人物性别、人数、出镜方式、主要姿态和主要道具。"
+        "把用户上传的服饰自然穿在参考图人物对应部位，让领口、肩带、袖口、腰线、裙摆、裤脚等跟随参考图人物动作和遮挡关系，只替换服饰主体。商品图如果包含人物、脸、发型、身体、背景、道具或强动作，只取服饰外观，不取商品图人物形象和姿势。"
         f"{subject_text}"
         f"附加要求：{user_prompt}"
     )

@@ -40,12 +40,8 @@
                 <textarea name="nonApparelPrompt" rows="8" placeholder="控制非服饰链路：参考图负责场景模板，商品图负责主体替换。"></textarea>
               </label>
               <label>
-                <span>服饰人像 SP</span>
-                <textarea name="apparelPortraitPrompt" rows="8" placeholder="控制服饰链路第一步：根据参考图先生成模特人像垫图。"></textarea>
-              </label>
-              <label>
                 <span>服饰最终图 SP</span>
-                <textarea name="apparelFinalPrompt" rows="8" placeholder="控制服饰链路第二步：结合参考图、生成的人像图和商品图输出最终 prompt。"></textarea>
+                <textarea name="apparelFinalPrompt" rows="8" placeholder="控制服饰链路：参考图负责人物/姿势/场景，商品图只负责服饰外观。"></textarea>
               </label>
               <label>
                 <span>默认附加 Prompt</span>
@@ -81,6 +77,7 @@
     <div class="lightbox" id="lightbox" hidden>
       <button class="lightbox-close" id="lightbox-close" type="button" aria-label="关闭预览">关闭</button>
       <img class="lightbox-image" id="lightbox-image" alt="生成结果大图预览" />
+      <div class="lightbox-detail" id="lightbox-detail"></div>
     </div>
     <script src="./options.js"></script>
   </body>

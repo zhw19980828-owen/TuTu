@@ -4,7 +4,6 @@ const fields = [
   "model",
   "visionModel",
   "nonApparelPrompt",
-  "apparelPortraitPrompt",
   "apparelFinalPrompt",
   "defaultUserPrompt",
   "imageSize",
@@ -21,6 +20,7 @@ const tabButtons = Array.from(document.querySelectorAll("[data-tab-target]"));
 const tabPanels = Array.from(document.querySelectorAll("[data-tab-panel]"));
 const lightbox = document.querySelector("#lightbox");
 const lightboxImage = document.querySelector("#lightbox-image");
+const lightboxDetail = document.querySelector("#lightbox-detail");
 const lightboxClose = document.querySelector("#lightbox-close");
 const SETTINGS_KEY = "userSettings";
 const GENERATION_RECORDS_KEY = "generationRecords";
@@ -181,7 +181,7 @@ async function renderGenerationRecords() {
   }
 
   const records = (Array.isArray(response.result) ? response.result : []).filter(
-    (record) => record?.imageUrl
+    (record) => record?.resultImageDataUrl || record?.imageUrl
   );
   if (!records.length) {
     historyGrid.innerHTML = "";
@@ -194,10 +194,12 @@ async function renderGenerationRecords() {
   historyGrid.innerHTML = records
     .map((record) => {
       const imageUrl = record.imageUrl || "";
+      const displayImageUrl = record.resultImageDataUrl || imageUrl;
+      const recordId = record.id || imageUrl;
       return `
-        <article class="history-card" data-image-url="${escapeHtml(imageUrl)}">
+        <article class="history-card" data-record-id="${escapeHtml(recordId)}">
           <div class="history-image-wrap">
-            <img class="history-image" src="${escapeHtml(imageUrl)}" alt="生成结果" loading="lazy" />
+            <img class="history-image" src="${escapeHtml(displayImageUrl)}" alt="生成结果" loading="lazy" />
             <div class="history-overlay">
               <div class="history-time">${formatRecordTime(record.createdAt)}</div>
             </div>
@@ -207,11 +209,29 @@ async function renderGenerationRecords() {
     })
     .join("");
 
+  const recordMap = new Map(records.map((record) => [record.id || record.imageUrl || "", record]));
   historyGrid.querySelectorAll(".history-card").forEach((card) => {
     card.addEventListener("click", () => {
-      openLightbox(card.dataset.imageUrl || "");
+      openHistoryLightbox(recordMap.get(card.dataset.recordId || ""));
     });
   });
+}
+
+function renderLightboxThumb(label, imageUrl, alt) {
+  if (!imageUrl) {
+    return `
+      <div class="lightbox-thumb is-empty">
+        <span>${escapeHtml(label)}</span>
+        <small>未保存</small>
+      </div>
+    `;
+  }
+  return `
+    <button class="lightbox-thumb" type="button" data-preview-url="${escapeHtml(imageUrl)}" aria-label="查看${escapeHtml(label)}">
+      <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}" />
+      <span>${escapeHtml(label)}</span>
+    </button>
+  `;
 }
 
 function formatRecordTime(value) {
@@ -258,15 +278,30 @@ function bindLightbox() {
   });
 }
 
-function openLightbox(imageUrl) {
-  if (!imageUrl) {
+function openHistoryLightbox(record) {
+  const resultImageUrl = record?.resultImageDataUrl || record?.imageUrl || "";
+  if (!resultImageUrl) {
     return;
   }
-  lightboxImage.src = decodeHtml(imageUrl);
+  lightboxImage.src = resultImageUrl;
+  lightboxDetail.innerHTML = `
+    <div class="lightbox-detail-title">${formatRecordTime(record.createdAt)}</div>
+    <div class="lightbox-thumbs">
+      ${renderLightboxThumb("参考图", record.referenceImageUrl || "", "参考图")}
+      ${renderLightboxThumb("商品图", record.productImageDataUrl || "", "商品图")}
+      ${renderLightboxThumb("结果图", resultImageUrl, "生成结果")}
+    </div>
+  `;
+  lightboxDetail.querySelectorAll("[data-preview-url]").forEach((button) => {
+    button.addEventListener("click", () => {
+      lightboxImage.src = button.dataset.previewUrl || "";
+    });
+  });
   lightbox.hidden = false;
 }
 
 function closeLightbox() {
   lightbox.hidden = true;
   lightboxImage.removeAttribute("src");
+  lightboxDetail.innerHTML = "";
 }

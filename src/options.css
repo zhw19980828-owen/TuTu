@@ -271,7 +271,9 @@ a {
   position: fixed;
   inset: 0;
   z-index: 10;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 18px;
   align-items: center;
   justify-content: center;
   padding: 32px;
@@ -287,6 +289,76 @@ a {
   max-height: calc(100vh - 120px);
   display: block;
   object-fit: contain;
+  justify-self: center;
+}
+
+.lightbox-detail {
+  align-self: center;
+  display: grid;
+  gap: 12px;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+}
+
+.lightbox-detail:empty {
+  display: none;
+}
+
+.lightbox-detail-title {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.lightbox-thumbs {
+  display: grid;
+  gap: 10px;
+}
+
+.lightbox-thumb {
+  position: relative;
+  height: 140px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  cursor: zoom-in;
+}
+
+.lightbox-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.lightbox-thumb span {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.72);
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.lightbox-thumb.is-empty {
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+
+.lightbox-thumb.is-empty span {
+  position: static;
+  background: transparent;
+}
+
+.lightbox-thumb.is-empty small {
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .lightbox-close {
@@ -322,11 +394,24 @@ a {
   }
 
   .lightbox {
+    grid-template-columns: 1fr;
     padding: 20px;
   }
 
   .lightbox-image {
     max-width: calc(100vw - 40px);
-    max-height: calc(100vh - 100px);
+    max-height: calc(100vh - 260px);
+  }
+
+  .lightbox-detail {
+    max-height: 190px;
+  }
+
+  .lightbox-thumbs {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .lightbox-thumb {
+    height: 110px;
   }
 }

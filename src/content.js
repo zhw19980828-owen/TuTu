@@ -18,6 +18,8 @@
     classificationJobId: 0,
     stageTimer: null,
     progressTimer: null,
+    progressSteps: [],
+    currentStageIndex: 0,
     hideTimer: null,
     pointerOnTrigger: false
   };
@@ -153,6 +155,7 @@
               <div class="xhs-replicator-progress-track">
                 <div class="xhs-replicator-progress-fill"></div>
               </div>
+              <div class="xhs-replicator-progress-steps"></div>
             </div>
             <div class="xhs-replicator-result" hidden>
               <div class="xhs-replicator-result-card">
@@ -160,13 +163,10 @@
                   <div class="xhs-replicator-result-title">生成结果</div>
                   <button class="xhs-replicator-button" data-variant="secondary" data-role="download">下载图片</button>
                 </div>
+                <div class="xhs-replicator-timing" data-role="timing" hidden></div>
                 <details class="xhs-replicator-debug">
                   <summary>查看最终生图 Prompt</summary>
                   <pre class="xhs-replicator-debug-text"></pre>
-                </details>
-                <details class="xhs-replicator-debug">
-                  <summary>查看发给生图模型的输入</summary>
-                  <pre class="xhs-replicator-debug-request"></pre>
                 </details>
                 <img alt="复刻结果" />
               </div>
@@ -189,10 +189,11 @@
     const progressWrap = mask.querySelector(".xhs-replicator-progress");
     const progressLabel = mask.querySelector(".xhs-replicator-progress-label");
     const progressFill = mask.querySelector(".xhs-replicator-progress-fill");
+    const progressSteps = mask.querySelector(".xhs-replicator-progress-steps");
     const resultWrap = mask.querySelector(".xhs-replicator-result");
     const debugText = mask.querySelector(".xhs-replicator-debug-text");
-    const debugRequestText = mask.querySelector(".xhs-replicator-debug-request");
     const resultImage = mask.querySelector(".xhs-replicator-result img");
+    const timing = mask.querySelector('[data-role="timing"]');
     const generateButton = mask.querySelector('[data-role="generate"]');
     const formSection = mask.querySelector(".xhs-replicator-form");
     const replaceProductButton = mask.querySelector('[data-role="replace-product"]');
@@ -265,16 +266,14 @@
       }
 
       try {
-        const classificationJobId = ++state.classificationJobId;
+        state.classificationJobId += 1;
         state.productImageDataUrl = await readFileAsDataUrl(file);
         state.productFileName = file.name;
-        state.generationPath = "";
-        state.generationPathSource = "";
         productThumb.src = state.productImageDataUrl;
         uploadCard.hidden = true;
         productChip.hidden = false;
-        status.textContent = "正在识别商品类型...";
-        await autoClassifyProduct(pathButtons, status, classificationJobId);
+        setGenerationPath(pathButtons, state.generationPath || "apparel", "default");
+        status.textContent = "已上传商品图。默认走服饰路径，需要非服饰时可手动切换。";
       } catch (error) {
         clearProductSelection({
           productInput,
@@ -307,20 +306,18 @@
         status.textContent = "请先上传你自己的商品图片。";
         return;
       }
-      if (state.classificationPending && !state.generationPath) {
-        status.textContent = "正在识别商品类型，请稍等一下。";
-        return;
-      }
       if (!state.generationPath) {
-        status.textContent = "还没有识别出商品路径，请重新上传商品图或手动选择。";
+        status.textContent = "请选择服饰或非服饰路径。";
         return;
       }
 
       generateButton.disabled = true;
       generateButton.textContent = "生成中...";
       status.textContent = "正在处理中，请稍等。";
-      startProgress(progressWrap, progressLabel, progressFill, state.generationPath);
+      const progressId = createProgressId();
+      startProgress(progressWrap, progressLabel, progressFill, state.generationPath, progressId);
       try {
+        const productThumbDataUrl = await createHistoryThumbnail(state.productImageDataUrl);
         const response = await replicateImageDirectly({
           imageUrl: state.currentImageUrl,
           productImageDataUrl: state.productImageDataUrl,
@@ -328,29 +325,41 @@
           productSubjectHint: subjectInput.value.trim(),
           generationPath: state.generationPath,
           userPrompt: notesInput.value.trim(),
-          imageSizeOverride: resolveImageSizeOverride(ratioInput.value)
+          imageSizeOverride: resolveImageSizeOverride(ratioInput.value),
+          progressId
         });
         if (!response?.ok) {
           throw new Error(response?.error || "请求失败");
         }
         state.generatedImageUrl = response.result.imageUrl;
         state.analysisPrompt = response.result.analysisPrompt || "";
-        state.imageRequestDebug = {
-          ...(response.result.imageRequestDebug || {}),
-          timings: response.result.timings || []
-        };
         debugText.textContent = response.result.prompt || "";
-        debugRequestText.textContent = formatImageRequestDebug(state.imageRequestDebug);
+        renderTiming(timing, response.result.timings || []);
         resultImage.src = state.generatedImageUrl;
         resultWrap.hidden = false;
-        finishProgress(progressLabel, progressFill);
-        progressWrap.hidden = true;
+        const resultThumbDataUrl = await createHistoryThumbnail(state.generatedImageUrl, {
+          maxSide: 720,
+          quality: 0.78
+        });
+        await saveGenerationRecord({
+          imageUrl: state.generatedImageUrl,
+          resultImageDataUrl: resultThumbDataUrl,
+          prompt: response.result.prompt || "",
+          referenceImageUrl: state.currentImageUrl,
+          productImageDataUrl: productThumbDataUrl,
+          productFileName: state.productFileName,
+          productSubjectHint: subjectInput.value.trim(),
+          generationPath: response.result.generationPath || state.generationPath,
+          userPrompt: notesInput.value.trim(),
+          imageSize: resolveImageSizeOverride(ratioInput.value)
+        });
+        finishProgress(progressWrap, progressLabel, progressFill);
         status.textContent = "";
         requestAnimationFrame(() => {
           scrollResultIntoView(formSection, resultWrap);
         });
       } catch (error) {
-        stopProgress(progressWrap, progressLabel, progressFill);
+        failProgress(progressWrap, progressLabel, progressFill);
         status.textContent = `生成失败：${error instanceof Error ? error.message : String(error)}`;
       } finally {
         generateButton.disabled = false;
@@ -374,11 +383,12 @@
       progressWrap,
       progressLabel,
       progressFill,
+      progressSteps,
       formSection,
       resultWrap,
       debugText,
-      debugRequestText,
-      resultImage
+      resultImage,
+      timing
     };
   }
 
@@ -401,7 +411,7 @@
     setGenerationPath(modal.pathButtons, "");
     modal.resultWrap.hidden = true;
     modal.debugText.textContent = "";
-    modal.debugRequestText.textContent = "";
+    renderTiming(modal.timing, []);
     modal.resultImage.removeAttribute("src");
     modal.mask.dataset.open = "true";
     modal.mask.style.display = "flex";
@@ -465,51 +475,11 @@
     });
   }
 
-  async function autoClassifyProduct(pathButtons, status, classificationJobId) {
-    state.classificationPending = true;
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: "classify-product",
-        payload: {
-          productImageDataUrl: state.productImageDataUrl
-        }
-      });
-      if (!response?.ok) {
-        throw new Error(response?.error || "识别失败");
-      }
-      if (classificationJobId !== state.classificationJobId) {
-        return;
-      }
-      const nextPath = response.result?.productKind === "apparel" ? "apparel" : "non_apparel";
-      if (state.generationPathSource !== "manual") {
-        setGenerationPath(pathButtons, nextPath, "auto");
-        status.textContent =
-          nextPath === "apparel" ? "已自动识别为服饰。可手动切换。" : "已自动识别为非服饰。可手动切换。";
-      } else {
-        status.textContent =
-          nextPath === "apparel"
-            ? "自动识别为服饰，你当前使用的是手动选择。"
-            : "自动识别为非服饰，你当前使用的是手动选择。";
-      }
-    } catch (error) {
-      if (classificationJobId !== state.classificationJobId) {
-        return;
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("Extension context invalidated")) {
-        status.textContent = "扩展刚刚更新，刷新当前页面后再试。";
-        return;
-      }
-      if (!state.generationPath) {
-        status.textContent = `自动识别失败，请手动选择路径：${message}`;
-      } else {
-        status.textContent = `自动识别失败，但已保留你当前的手动路径：${message}`;
-      }
-    } finally {
-      if (classificationJobId === state.classificationJobId) {
-        state.classificationPending = false;
-      }
+  function createProgressId() {
+    if (window.crypto?.randomUUID) {
+      return window.crypto.randomUUID();
     }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   function scheduleHideTrigger() {
@@ -593,11 +563,11 @@
       productFileName: payload.productFileName || "",
       productSubjectHint: payload.productSubjectHint || "",
       generationPath: payload.generationPath || "",
+      progressId: payload.progressId || "",
       userPrompt: payload.userPrompt || "",
       model: settings.model,
       visionModel: settings.visionModel,
       nonApparelPrompt: settings.nonApparelPrompt,
-      apparelPortraitPrompt: settings.apparelPortraitPrompt,
       apparelFinalPrompt: settings.apparelFinalPrompt,
       defaultUserPrompt: settings.defaultUserPrompt,
       imageSize: payload.imageSizeOverride || settings.imageSize,
@@ -630,13 +600,59 @@
         imageRequestDebug: data.imageRequestDebug || null,
         timings: Array.isArray(data.timings) ? data.timings : [],
         generationPath: data.generationPath || payload.generationPath || "",
-        portraitImageUrl: data.portraitImageUrl || "",
         referenceHasFace: Boolean(data.referenceHasFace),
         analysisPrompt: data.analysisPrompt || "",
         productAnalysisPrompt: data.productAnalysisPrompt || "",
         referenceAnalysisPrompt: data.referenceAnalysisPrompt || ""
       }
     };
+  }
+
+  async function saveGenerationRecord(record) {
+    try {
+      await chrome.runtime.sendMessage({
+        type: "save-generation-record",
+        payload: record
+      });
+    } catch (error) {
+      console.warn("[Commerce Replicator] 保存生成记录失败", error);
+    }
+  }
+
+  async function createHistoryThumbnail(imageSource, options = {}) {
+    if (!imageSource) {
+      return "";
+    }
+    try {
+      const image = await loadImage(imageSource);
+      const maxSide = options.maxSide || 360;
+      const quality = options.quality || 0.72;
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+      const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+      const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0, width, height);
+      return canvas.toDataURL("image/jpeg", quality);
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("缩略图生成失败"));
+      image.src = src;
+    });
+  }
+
+  function isDataUrl(value) {
+    return typeof value === "string" && value.startsWith("data:");
   }
 
   async function getLocalTestSettings() {
@@ -682,6 +698,58 @@
     } catch (error) {
       return `复刻失败 (${status})：${text.slice(0, 400)}`;
     }
+  }
+
+  function renderTiming(container, timings) {
+    if (!container) {
+      return;
+    }
+    const kimiTimings = Array.isArray(timings)
+      ? timings.filter((item) => item?.label?.startsWith?.("kimi_"))
+      : [];
+    if (!kimiTimings.length) {
+      container.hidden = true;
+      container.textContent = "";
+      return;
+    }
+
+    const totalMs = kimiTimings.reduce((sum, item) => sum + Number(item.elapsedMs || 0), 0);
+    const details = kimiTimings
+      .map((item) => `${formatTimingLabel(item.label)} ${formatDuration(item.elapsedMs)}`)
+      .join(" / ");
+    container.hidden = false;
+    container.innerHTML = `
+      <span>Kimi 耗时 ${formatDuration(totalMs)}</span>
+      <small>${escapeHtml(details)}</small>
+    `;
+  }
+
+  function formatTimingLabel(label) {
+    const labels = {
+      kimi_product_classification: "分类",
+      kimi_apparel_reference_analysis: "参考图分析",
+      kimi_reference_face: "人脸判断",
+      kimi_non_apparel_prompt: "非服饰 Prompt",
+      kimi_apparel_reference_description: "参考图描述",
+      kimi_apparel_final_prompt: "服饰 Prompt"
+    };
+    return labels[label] || label || "Kimi";
+  }
+
+  function formatDuration(value) {
+    const ms = Number(value || 0);
+    if (!Number.isFinite(ms) || ms <= 0) {
+      return "0.0s";
+    }
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
   }
 
   function resolveImageSizeOverride(value) {
@@ -746,38 +814,62 @@
     }).value;
   }
 
-  function startProgress(progressWrap, progressLabel, progressFill, generationPath) {
+  function startProgress(progressWrap, progressLabel, progressFill, generationPath, progressId) {
     stopProgress(progressWrap, progressLabel, progressFill);
     progressWrap.hidden = false;
-    const steps =
-      generationPath === "apparel"
-        ? [
-            { label: "1/5 正在识别商品是服饰，并检查参考图里是否有人脸", progress: 14 },
-            { label: "2/5 正在学习参考图并生成人像垫图 Prompt", progress: 30 },
-            { label: "3/5 正在生成模特人像垫图", progress: 48 },
-            { label: "4/5 正在融合参考图、人像图和商品图约束", progress: 72 },
-            { label: "5/5 正在生成最终服饰画面", progress: 88 }
-          ]
-        : [
-            { label: "1/4 正在分析参考图里的场景、时间和主体关系", progress: 18 },
-            { label: "2/4 正在识别商品图里的主体与高辨识度细节", progress: 38 },
-            { label: "3/4 正在融合商品与场景约束", progress: 62 },
-            { label: "4/4 正在生成最终画面", progress: 84 }
-          ];
-    let index = 0;
-    progressLabel.textContent = steps[0].label;
+    const steps = getProgressSteps(generationPath);
+    state.progressSteps = steps;
+    state.currentStageIndex = 0;
+    renderProgressSteps(0);
+    progressLabel.textContent = `${1}/${steps.length} ${steps[0].title}`;
     progressFill.style.width = `${steps[0].progress}%`;
-    state.stageTimer = window.setInterval(() => {
-      index = Math.min(index + 1, steps.length - 1);
-      progressLabel.textContent = steps[index].label;
-      progressFill.style.width = `${steps[index].progress}%`;
-    }, 2200);
+    state.progressTimer = window.setInterval(() => {
+      pollBackendProgress(progressId, progressLabel, progressFill);
+    }, 900);
+    pollBackendProgress(progressId, progressLabel, progressFill);
   }
 
-  function finishProgress(progressLabel, progressFill) {
+  async function pollBackendProgress(progressId, progressLabel, progressFill) {
+    if (!progressId) {
+      return;
+    }
+    try {
+      const response = await fetch(`http://127.0.0.1:8787/progress/${encodeURIComponent(progressId)}`);
+      if (!response.ok) {
+        return;
+      }
+      const data = await response.json();
+      updateProgressFromBackend(data, progressLabel, progressFill);
+    } catch (error) {
+      // 进度轮询失败不打断主生成请求，最终错误由主请求展示。
+    }
+  }
+
+  function updateProgressFromBackend(data, progressLabel, progressFill) {
+    if (!data || !Array.isArray(data.steps) || !data.steps.length) {
+      return;
+    }
+    state.progressSteps = data.steps;
+    const index = Math.max(0, Math.min(Number(data.activeIndex || 0), data.steps.length - 1));
+    state.currentStageIndex = index;
+    const terminalState = data.status === "done" ? "done" : data.status === "error" ? "error" : "";
+    renderProgressSteps(index, terminalState);
+    progressLabel.textContent =
+      data.status === "done"
+        ? `${data.steps.length}/${data.steps.length} 生成完成`
+        : `${index + 1}/${data.steps.length} ${data.message || data.steps[index].title}`;
+    progressFill.style.width =
+      data.status === "done" ? "100%" : `${data.steps[index].progress || 0}%`;
+  }
+
+  function finishProgress(progressWrap, progressLabel, progressFill) {
     clearProgressTimers();
-    progressLabel.textContent = "4/4 生成完成";
+    const steps = state.progressSteps.length ? state.progressSteps : getProgressSteps(state.generationPath);
+    state.currentStageIndex = steps.length - 1;
+    renderProgressSteps(steps.length - 1, "done");
+    progressLabel.textContent = `${steps.length}/${steps.length} 生成完成`;
     progressFill.style.width = "100%";
+    progressWrap.hidden = true;
   }
 
   function stopProgress(progressWrap, progressLabel, progressFill) {
@@ -785,6 +877,21 @@
     progressWrap.hidden = true;
     progressLabel.textContent = "准备开始...";
     progressFill.style.width = "0%";
+    state.progressSteps = [];
+    state.currentStageIndex = 0;
+    renderProgressSteps(0);
+  }
+
+  function failProgress(progressWrap, progressLabel, progressFill) {
+    clearProgressTimers();
+    if (!state.progressSteps.length) {
+      stopProgress(progressWrap, progressLabel, progressFill);
+      return;
+    }
+    progressWrap.hidden = false;
+    renderProgressSteps(state.currentStageIndex, "error");
+    progressLabel.textContent = `停在 ${state.currentStageIndex + 1}/${state.progressSteps.length} ${state.progressSteps[state.currentStageIndex].title}`;
+    progressFill.style.width = `${state.progressSteps[state.currentStageIndex].progress}%`;
   }
 
   function clearProgressTimers() {
@@ -796,6 +903,74 @@
       window.clearInterval(state.progressTimer);
       state.progressTimer = null;
     }
+  }
+
+  function getProgressSteps(generationPath) {
+    return generationPath === "apparel"
+      ? [
+          {
+            title: "分析参考图",
+            detail: "Kimi 读取小红书参考图，提取人物形象、场景、姿势和构图。",
+            progress: 25
+          },
+          {
+            title: "融合服饰约束",
+            detail: "Kimi 写最终服饰换装 Prompt，商品图只提供服饰外观。",
+            progress: 55
+          },
+          {
+            title: "生成最终图片",
+            detail: "参考图约束人物和场景，商品图只约束服饰。",
+            progress: 88
+          }
+        ]
+      : [
+          {
+            title: "生成复刻 Prompt",
+            detail: "Kimi 分析参考图的场景、机位、光线和商品摆放关系。",
+            progress: 35
+          },
+          {
+            title: "生成最终图片",
+            detail: "Prompt 返回后，调用生图模型输出结果图。",
+            progress: 84
+          }
+        ];
+  }
+
+  function renderProgressSteps(activeIndex, terminalState = "") {
+    const container = modal?.progressSteps;
+    if (!container) {
+      return;
+    }
+    const steps = state.progressSteps || [];
+    if (!steps.length) {
+      container.innerHTML = "";
+      return;
+    }
+    container.innerHTML = steps
+      .map((step, index) => {
+        let status = "pending";
+        if (terminalState === "done") {
+          status = "done";
+        } else if (terminalState === "error" && index === activeIndex) {
+          status = "error";
+        } else if (index < activeIndex) {
+          status = "done";
+        } else if (index === activeIndex) {
+          status = "active";
+        }
+        return `
+          <div class="xhs-replicator-progress-step" data-state="${status}">
+            <span class="xhs-replicator-progress-dot"></span>
+            <div>
+              <strong>${escapeHtml(step.title)}</strong>
+              <small>${escapeHtml(step.detail)}</small>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
   }
 
   function formatImageRequestDebug(debug) {
