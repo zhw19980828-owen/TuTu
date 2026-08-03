@@ -6,7 +6,8 @@ const fields = [
   "nonApparelPrompt",
   "apparelFinalPrompt",
   "defaultUserPrompt",
-  "imageSize",
+  "imageResolution",
+  "imageAspectRatio",
   "responseDataPath",
   "extraBody"
 ];
@@ -16,6 +17,7 @@ const status = document.querySelector("#status");
 const saveButton = document.querySelector("#save-button");
 const historyGrid = document.querySelector("#history-grid");
 const historyEmpty = document.querySelector("#history-empty");
+const runningSummary = document.querySelector("#running-summary");
 const tabButtons = Array.from(document.querySelectorAll("[data-tab-target]"));
 const tabPanels = Array.from(document.querySelectorAll("[data-tab-panel]"));
 const lightbox = document.querySelector("#lightbox");
@@ -27,16 +29,25 @@ const GENERATION_RECORDS_KEY = "generationRecords";
 const LOCAL_TEST_SETTINGS = {
   backendBaseUrl: "http://127.0.0.1:8787",
   proxyToken: "",
-  model: "openai/gpt-5.4-image-2",
-  visionModel: "moonshotai/kimi-k2.6",
+  model: "dreamina/image2image:5.0Pro",
+  visionModel: "kimi-k2.6",
   defaultUserPrompt: ""
 };
 const MODEL_MIGRATIONS = {
-  "doubao-seedream-4-5-251128": "openai/gpt-5.4-image-2",
-  "doubao-seed-1-6-251015": "moonshotai/kimi-k2.6"
+  "doubao-seedream-4-5-251128": "dreamina/image2image:5.0Pro",
+  "dreamina/image2image:4.7": "dreamina/image2image:5.0Pro",
+  "dreamina/image2image:5.0": "dreamina/image2image:5.0Pro",
+  "doubao-seed-1-6-251015": "kimi-k2.6",
+  "moonshotai/kimi-k2.6": "kimi-k2.6"
 };
 
 bootstrap();
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes[GENERATION_RECORDS_KEY]) {
+    renderGenerationRecords().catch(() => {});
+  }
+});
 
 async function bootstrap() {
   try {
@@ -151,6 +162,17 @@ function migrateLegacyModels(settings) {
   if (settings.visionModel && MODEL_MIGRATIONS[settings.visionModel]) {
     settings.visionModel = MODEL_MIGRATIONS[settings.visionModel];
   }
+  const legacyImageSize = String(settings.imageSize || "").trim().toLowerCase();
+  if (!settings.imageResolution) {
+    settings.imageResolution = "1k";
+  }
+  if (!settings.imageAspectRatio) {
+    settings.imageAspectRatio = parseAspectRatio(legacyImageSize) ? legacyImageSize : "follow";
+  }
+}
+
+function parseAspectRatio(value) {
+  return /^(21:9|16:9|3:2|4:3|1:1|3:4|2:3|9:16)$/.test(String(value || ""));
 }
 
 function bindTabs() {
@@ -175,14 +197,19 @@ async function renderGenerationRecords() {
   const response = await chrome.runtime.sendMessage({ type: "get-generation-records" });
   if (!response?.ok) {
     historyGrid.innerHTML = "";
+    runningSummary.hidden = true;
+    runningSummary.textContent = "";
     historyEmpty.hidden = false;
     historyEmpty.textContent = `加载记录失败：${response?.error || "未知错误"}`;
     return;
   }
 
-  const records = (Array.isArray(response.result) ? response.result : []).filter(
-    (record) => record?.resultImageDataUrl || record?.imageUrl
+  const records = (Array.isArray(response.result) ? response.result : []).filter((record) =>
+    Boolean(record?.status || record?.resultImageDataUrl || record?.imageUrl)
   );
+  const runningCount = records.filter((record) => record.status === "running").length;
+  runningSummary.hidden = runningCount === 0;
+  runningSummary.textContent = runningCount ? `${runningCount} 个任务生成中` : "";
   if (!records.length) {
     historyGrid.innerHTML = "";
     historyEmpty.hidden = false;
@@ -196,8 +223,41 @@ async function renderGenerationRecords() {
       const imageUrl = record.imageUrl || "";
       const displayImageUrl = record.resultImageDataUrl || imageUrl;
       const recordId = record.id || imageUrl;
+      const recordStatus = record.status || (displayImageUrl ? "done" : "error");
+      if (recordStatus === "running") {
+        const background = record.referenceImageUrl
+          ? `<img class="history-placeholder-image" src="${escapeHtml(record.referenceImageUrl)}" alt="任务参考图" loading="lazy" />`
+          : "";
+        return `
+          <article class="history-card is-running" data-record-id="${escapeHtml(recordId)}">
+            <div class="history-image-wrap">
+              ${background}
+              <div class="history-placeholder">
+                <span class="history-spinner" aria-hidden="true"></span>
+                <strong>正在生成</strong>
+                <small>${escapeHtml(record.stageLabel || "正在分析参考图")}</small>
+              </div>
+              <div class="history-overlay"><div class="history-time">${formatRecordTime(record.createdAt)}</div></div>
+            </div>
+          </article>
+        `;
+      }
+      if (recordStatus === "error" || !displayImageUrl) {
+        return `
+          <article class="history-card is-error" data-record-id="${escapeHtml(recordId)}">
+            <div class="history-image-wrap">
+              <div class="history-placeholder">
+                <span class="history-error-mark" aria-hidden="true">!</span>
+                <strong>生成失败</strong>
+                <button class="history-retry-button" type="button" data-retry-record="${escapeHtml(recordId)}">重试</button>
+              </div>
+              <div class="history-overlay"><div class="history-time">${formatRecordTime(record.createdAt)}</div></div>
+            </div>
+          </article>
+        `;
+      }
       return `
-        <article class="history-card" data-record-id="${escapeHtml(recordId)}">
+        <article class="history-card is-done" data-record-id="${escapeHtml(recordId)}">
           <div class="history-image-wrap">
             <img class="history-image" src="${escapeHtml(displayImageUrl)}" alt="生成结果" loading="lazy" />
             <div class="history-overlay">
@@ -210,9 +270,33 @@ async function renderGenerationRecords() {
     .join("");
 
   const recordMap = new Map(records.map((record) => [record.id || record.imageUrl || "", record]));
+  historyGrid.querySelectorAll("[data-retry-record]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      if (button.disabled) {
+        return;
+      }
+      button.disabled = true;
+      button.textContent = "重试中";
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "retry-generation-record",
+          payload: { id: button.dataset.retryRecord || "" }
+        });
+        if (!response?.ok) {
+          throw new Error(response?.error || "重试失败");
+        }
+      } catch (error) {
+        button.textContent = "请回原页面重试";
+      }
+    });
+  });
   historyGrid.querySelectorAll(".history-card").forEach((card) => {
     card.addEventListener("click", () => {
-      openHistoryLightbox(recordMap.get(card.dataset.recordId || ""));
+      const record = recordMap.get(card.dataset.recordId || "");
+      if ((record?.status || "done") === "done") {
+        openHistoryLightbox(record);
+      }
     });
   });
 }

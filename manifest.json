@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Xiaohongshu Image Replicator",
+  "name": "AIC",
   "version": "0.1.0",
   "description": "Hover over Xiaohongshu images to replicate them with your own image model.",
   "permissions": [
@@ -44,6 +44,6 @@
   ],
   "options_page": "src/options.html",
   "action": {
-    "default_title": "小红书图片复刻"
+    "default_title": "AIC AI复刻"
   }
 }

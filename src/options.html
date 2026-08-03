@@ -3,13 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>电商商拍复刻设置</title>
+    <title>AIC</title>
     <link rel="stylesheet" href="./options.css" />
   </head>
   <body>
     <main class="page">
       <section class="workspace">
         <aside class="sidebar">
+          <div class="sidebar-brand" aria-label="AIC">
+            <span class="sidebar-brand-mark">AIC</span>
+            <div>
+              <h1>AIC</h1>
+              <small>AI Commerce</small>
+            </div>
+          </div>
           <nav class="sidebar-nav" aria-label="我的页面分栏">
             <button class="sidebar-link" type="button" data-tab-target="settings">设置</button>
             <button class="sidebar-link is-active" type="button" data-tab-target="history">生成记录</button>
@@ -18,6 +25,13 @@
 
         <section class="content-card">
           <section class="tab-panel" data-tab-panel="settings">
+            <header class="panel-heading">
+              <div>
+                <span class="panel-eyebrow">AIC SETTINGS</span>
+                <h2>设置</h2>
+              </div>
+              <p>模型、提示词与输出参数统一在这里管理。</p>
+            </header>
             <form id="settings-form">
               <label>
                 <span>后端地址</span>
@@ -29,11 +43,11 @@
               </label>
               <label>
                 <span>模型名</span>
-                <input name="model" type="text" placeholder="openai/gpt-5.4-image-2" required />
+                <input name="model" type="text" placeholder="dreamina/image2image:5.0Pro" required />
               </label>
               <label>
                 <span>识图模型</span>
-                <input name="visionModel" type="text" placeholder="moonshotai/kimi-k2.6" required />
+                <input name="visionModel" type="text" placeholder="kimi-k2.6" required />
               </label>
               <label>
                 <span>非服饰 SP</span>
@@ -47,10 +61,30 @@
                 <span>默认附加 Prompt</span>
                 <textarea name="defaultUserPrompt" rows="4" placeholder="例如：适合电商首页投放、商品主体清晰、背景高级、面料质感明确"></textarea>
               </label>
-              <label>
-                <span>图片尺寸</span>
-                <input name="imageSize" type="text" placeholder="2K" />
-              </label>
+              <div class="settings-grid">
+                <label>
+                  <span>分辨率</span>
+                  <select name="imageResolution">
+                    <option value="1k">1K</option>
+                    <option value="2k">2K</option>
+                    <option value="4k">4K</option>
+                  </select>
+                </label>
+                <label>
+                  <span>比例</span>
+                  <select name="imageAspectRatio">
+                    <option value="follow">智能（跟随参考图）</option>
+                    <option value="21:9">21:9</option>
+                    <option value="16:9">16:9</option>
+                    <option value="3:2">3:2</option>
+                    <option value="4:3">4:3</option>
+                    <option value="1:1">1:1</option>
+                    <option value="3:4">3:4</option>
+                    <option value="2:3">2:3</option>
+                    <option value="9:16">9:16</option>
+                  </select>
+                </label>
+              </div>
               <label>
                 <span>返回图片路径</span>
                 <input name="responseDataPath" type="text" placeholder="OpenRouter 图片输出自动解析，这里通常留空" />
@@ -68,6 +102,13 @@
           </section>
 
           <section class="tab-panel is-active" data-tab-panel="history">
+            <header class="panel-heading history-heading">
+              <div>
+                <span class="panel-eyebrow">AIC WORKSPACE</span>
+                <h2>生成记录</h2>
+              </div>
+              <span class="running-summary" id="running-summary" hidden></span>
+            </header>
             <div class="history-grid" id="history-grid"></div>
             <div class="history-empty" id="history-empty" hidden>还没有生成记录，先去生成一张试试。</div>
           </section>
@@ -75,7 +116,7 @@
       </section>
     </main>
     <div class="lightbox" id="lightbox" hidden>
-      <button class="lightbox-close" id="lightbox-close" type="button" aria-label="关闭预览">关闭</button>
+      <button class="lightbox-close" id="lightbox-close" type="button" aria-label="关闭预览">×</button>
       <img class="lightbox-image" id="lightbox-image" alt="生成结果大图预览" />
       <div class="lightbox-detail" id="lightbox-detail"></div>
     </div>

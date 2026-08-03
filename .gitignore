@@ -2,6 +2,7 @@
 *.zip
 .env
 .openrouter_key
+.kimi_key
 server/.env
 node_modules/
 __pycache__/
