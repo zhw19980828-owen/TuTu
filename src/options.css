@@ -218,6 +218,16 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.history-heading {
+  justify-content: flex-end;
+  min-height: 0;
+  margin-bottom: 18px;
+}
+
+.history-heading:has(.running-summary[hidden]) {
+  margin-bottom: 0;
+}
+
 #settings-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -472,11 +482,51 @@ textarea:focus {
   inset: auto 0 0;
   z-index: 2;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   padding: 16px;
   background: linear-gradient(transparent, rgba(15, 15, 17, 0.34));
   opacity: 0;
   transition: opacity 160ms ease;
+}
+
+.history-download-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(22, 22, 24, 0.56);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.history-download-button svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.history-download-button:hover {
+  transform: translateY(-1px);
+  background: rgba(22, 22, 24, 0.82);
+}
+
+.history-download-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .history-card:hover .history-overlay,
@@ -516,7 +566,7 @@ textarea:focus {
   inset: 0;
   z-index: 1000;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 310px;
+  grid-template-columns: minmax(0, 1fr) 260px;
   gap: 18px;
   align-items: center;
   padding: 32px;
@@ -544,15 +594,39 @@ textarea:focus {
   color: #fff;
   background: rgba(27, 27, 30, 0.9);
   box-shadow: 0 14px 30px rgba(23, 23, 25, 0.2);
-  font-size: 28px;
-  font-weight: 300;
+  font-size: 0;
   cursor: pointer;
+}
+
+.lightbox-close::before,
+.lightbox-close::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  transform-origin: center;
+}
+
+.lightbox-close::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.lightbox-close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .lightbox-image {
   justify-self: center;
-  max-width: 100%;
-  max-height: calc(100vh - 64px);
+  width: min(100%, calc(75vh - 48px));
+  max-width: none;
+  height: auto;
+  max-height: none;
+  aspect-ratio: 3 / 4;
+  box-sizing: border-box;
   border: 10px solid rgba(255, 255, 255, 0.72);
   border-radius: 30px;
   background: rgba(255, 255, 255, 0.5);
@@ -561,9 +635,11 @@ textarea:focus {
 }
 
 .lightbox-detail {
-  max-height: calc(100vh - 64px);
-  overflow: auto;
-  padding: 18px;
+  width: 260px;
+  height: 260px;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 14px;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.68);
@@ -573,24 +649,28 @@ textarea:focus {
 }
 
 .lightbox-detail-title {
-  margin-bottom: 14px;
+  height: 18px;
+  margin-bottom: 8px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+  line-height: 18px;
 }
 
 .lightbox-thumbs {
   display: grid;
-  gap: 10px;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  height: calc(100% - 26px);
 }
 
 .lightbox-thumb {
   position: relative;
-  min-height: 128px;
+  min-height: 0;
   overflow: hidden;
   padding: 0;
   border: 0;
-  border-radius: 18px;
+  border-radius: 14px;
   color: #fff;
   background: #dfe1e5;
   cursor: pointer;
@@ -598,7 +678,7 @@ textarea:focus {
 
 .lightbox-thumb img {
   width: 100%;
-  height: 150px;
+  height: 100%;
   display: block;
   object-fit: cover;
 }
@@ -651,7 +731,7 @@ textarea:focus {
   #settings-form > label { grid-column: 1 / -1 !important; }
   .lightbox { grid-template-columns: 1fr; padding: 18px; }
   .lightbox-detail { display: none; }
-  .lightbox-image { max-height: calc(100vh - 36px); }
+  .lightbox-image { width: min(100%, calc(75vh - 27px)); }
 }
 
 @media (max-width: 520px) {

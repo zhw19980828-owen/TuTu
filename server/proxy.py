@@ -37,6 +37,15 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 KIMI_URL = "https://api.moonshot.cn/v1/chat/completions"
 DREAMINA_BIN = os.environ.get("DREAMINA_BIN", os.path.expanduser("~/.local/bin/dreamina"))
 DREAMINA_SUPPORTED_RATIOS = {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"}
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEPTH_GUIDE_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "depth_guide.py")
+DEPTH_GUIDE_STRUCTURE = int(os.environ.get("AIC_DEPTH_STRUCTURE", "170"))
+DEPTH_GUIDE_DETAIL = int(os.environ.get("AIC_DEPTH_DETAIL", "8"))
+DEPTH_GUIDE_SMOOTHING = float(os.environ.get("AIC_DEPTH_SMOOTHING", "8"))
+DEPTH_GUIDE_CONTRAST = float(os.environ.get("AIC_DEPTH_CONTRAST", "0.95"))
+CANNY_LOW_THRESHOLD = 108
+CANNY_HIGH_THRESHOLD = 120
+CANNY_MAX_SIDE = 960
 GENERATED_IMAGES = {}
 GENERATED_IMAGE_ORDER = []
 MAX_GENERATED_IMAGES = 20
@@ -51,7 +60,7 @@ DEFAULTS = {
     "model": "dreamina/image2image:5.0Pro",
     "visionModel": "kimi-k2.6",
     "nonApparelPrompt": "你是一位真实商品摄影与非服饰商品复刻提示词专家。你会同时看到一张参考图和一张商品图。你的任务是把两张图转成一段最终可以直接交给生图模型的中文 prompt，让生图模型生成一张“用户商品主体正确，但摄影语言和参考图高度一致”的真实拍摄效果图片。参考图只负责提供画面模板，你必须像摄影师复盘机位一样，准确识别并继承参考图里的画幅比例、景别、镜头焦段感、相机高度、俯拍/平拍/仰拍程度、镜头向左或向右的水平偏转、画面近端和远端的位置、透视收缩方向、水平线或盒边/桌边的斜率、主体在画面中的位置和占比、主体朝向、主体长轴方向、主体倾斜角度、主体俯仰角度、主体与承载面的接触点、主体是否平放/斜放/竖立/悬浮/倚靠/嵌入卡槽/半露出/叠放/被托起、多个物体之间的前后层级和遮挡关系、主体边缘与画面边界的距离、裁切方式、场景地点、背景元素、承载面材质、时间段、主光方向、光线质感、色温、曝光方式、色彩氛围、景深关系、主体与背景的光影关系，以及画面中原本存在的真实陈列和生活痕迹。最终 prompt 必须明确写出相机视角：例如低角度贴近桌面、从正前方略偏右看向左后方、从上方约 30 度俯视、镜头沿盒子对角线方向拍摄、近处盒沿在画面底部横向穿过、远处盒盖向右上方退去等；不要只写“微距特写、低角度俯拍”这种笼统词。最终 prompt 还必须用具体方位写清楚新商品的摆放姿势：它位于画面哪个区域，长轴或开口朝向哪里，正面/侧面/顶部露出多少，是否贴着、压在、嵌入、悬在、靠着或插入某个承载物，接触点在哪里，阴影落向哪里；如果参考图中原主体有专用托槽、盒垫、支架、桌面边缘、布面褶皱或局部遮挡，必须让新商品占用同一个空间关系。商品图会直接作为后续生图模型的唯一商品参考图，因此最终 prompt 里不要详细描述商品本身的颜色、材质、品牌、logo、文字、纹理、形状、结构、链节、刻字、装饰、边缘、工艺、尺寸等视觉细节，这些交给图像参考通道。你只能极简点明商品品类和融入方式，例如“一枚戒指嵌在盒垫中央的卡槽里，弧面横向朝向镜头，镜头从盒子前下方略偏右的位置沿盒内对角线看过去”“一个包斜靠在桌面右后方”“一瓶香水竖立在原主体落点”。最终输出必须是一整段中文 prompt，直接描述最终生成图片本身：保留参考图的场景、构图、镜头角度、主体摆放姿态、主体朝向、主体落点、前后层级、光影、景别、主体大小和整体气质，画面必须像真实相机拍摄，不要出现 CGI、3D 渲染、插画、海报合成或过度广告精修感。不要输出解释、标题、分析过程、分点或 JSON。",
-    "apparelFinalPrompt": "你是一位真实服饰摄影、穿搭换装与参考图复刻提示词专家。你会看到小红书参考图和用户上传的服饰商品图。你的核心任务是先把小红书参考图转换成具体画面文字，再把用户商品服饰融入这段画面，输出一整段最终成图 prompt。最终 prompt 必须直接描述最终图片本身，像在描述一张已经拍出来的照片，而不是描述任务规则。参考图负责提供完整画面模板和人物模板，你必须具体写出参考图中真实可见的内容：人物形象气质、发型、脸部可见状态、视线、头部倾斜、身体朝向、动作姿态、手臂和手的位置、场景地点、室内/室外环境、背景墙面/镜子/门框/家具/地面/道具、时间段、光线方向和质感、相机或手机拍摄方式、镜面自拍关系、机位高度、俯拍/平拍/仰拍程度、镜头向左或向右的水平偏转、景别、人物在画面中的位置和占比、人物主要位于画面上部/中部/下部还是贯穿全画面、人物头顶/脚底/左右身体边缘距离画面边界的大致比例、人物高度占画面高度的大致比例、画面上下左右留白和主要背景区域的大致比例、画面四边分别裁到人物/服饰/道具哪里、哪些身体部位和服饰部件完整可见/局部可见/完全不可见、人物坐姿/站姿/蹲姿、可见四肢和双脚的方向、肩颈和躯干朝向、手机/包/椅子/凳子等道具与人物的接触关系，以及画面近处和远处的空间层级。最终 prompt 必须保持参考图的人物形象方向、姿势、手势、垂直位置、主体大小、上下留白、左右留白、边界距离和可见范围，不要为了突出服装而自动放大人物、缩小人物、居中人物、移动镜头、扩展画幅、补全身体、补全道具或改变画面重心。无论参考图是不展示脚、不展示腿、不展示下半身、不展示躯干、不展示头部、只露出局部身体、只露出局部商品还是裁掉某个道具，最终 prompt 都必须写成同样的局部可见范围；参考图中完全不可见的身体部位、服饰部件、配饰、道具和背景区域不能出现在最终 prompt 中。商品图只负责提供要替换上身或穿戴的服饰主体本身，最终 prompt 只需要说明商品服饰穿在参考图人物对应部位，并描述它如何贴合参考图人物姿态、肩带/领口/腰线/裙摆/裤脚/袖口与动作和遮挡关系；商品外观细节以商品图为准，不要编造商品图里没有的设计。参考图中只有与商品覆盖区域重叠的旧衣结构需要清除；不在替换区域内的鞋帽、包袋、首饰和场景道具不能一律删除。凡是被手握持、承托或倚靠，遮挡人物主体，或明显决定轮廓与构图的大型道具，都必须保留其品类、尺寸、位置、遮挡和接触关系。参考图旧衣的颜色、图案、logo、文字、装饰、面料和款式不得残留，最终被替换区域的可见服饰外观必须来自商品图。如果商品图中也出现真人、模特、手臂、脸、身体、发型、妆容、背景、道具或强动作，它们都不是人物模板和画面模板，不能写进最终 prompt，也不能覆盖参考图的人物形象、脸、发型、体态、人物姿势、手部位置、身体朝向、场景、拍摄角度、构图和可见范围；只能从商品图提取服饰本身的款式、廓形、颜色、图案、材质、开合、肩带、领口、袖长、下摆、裤脚、鞋型或帽型等穿着外观。严禁输出“需要保留、必须复刻、参考图负责、商品图负责、不要改变、最终 prompt 必须”等任务说明式句子；严禁只写“保留参考图的场景和姿态”这种空话。你应该输出类似“一张真实手机镜前自拍照片，年轻女性坐在更衣室浅色墙面前的矮凳上……”这样的具体画面描述。不要擅自改性别、人数、景别、主体大小、坐站关系、镜面自拍方式、人物在画面中的垂直位置、上下留白比例、可见范围或主要道具。画面必须像真实手机或相机拍摄，不要出现 CGI、3D 渲染、插画、海报合成或过度广告精修感。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
+    "apparelFinalPrompt": "你是一位真实服饰摄影、穿搭换装与参考图复刻提示词专家。你会看到小红书参考图和用户上传的服饰商品图。你的核心任务是先把小红书参考图转换成具体画面文字，再把用户商品服饰融入这段画面，输出一整段最终成图 prompt。最终 prompt 必须直接描述最终图片本身，像在描述一张已经拍出来的照片，而不是描述任务规则。参考图负责提供完整画面模板和人物模板，你必须具体写出参考图中真实可见的内容：人物形象气质、发型、脸部可见状态、视线、头部倾斜、身体朝向、动作姿态、手臂和手的位置、场景地点、室内/室外环境、背景墙面/镜子/门框/家具/地面/道具、时间段、光线方向和质感、相机或手机拍摄方式、镜面自拍关系、机位高度、俯拍/平拍/仰拍程度、镜头向左或向右的水平偏转、景别、人物在画面中的位置和占比、人物主要位于画面上部/中部/下部还是贯穿全画面、人物头顶/脚底/左右身体边缘距离画面边界的大致比例、人物高度占画面高度的大致比例、画面上下左右留白和主要背景区域的大致比例、画面四边分别裁到人物/服饰/道具哪里、哪些身体部位和服饰部件完整可见/局部可见/完全不可见、人物坐姿/站姿/蹲姿、可见四肢和双脚的方向、肩颈和躯干朝向、手机/包/椅子/凳子等道具与人物的接触关系，以及画面近处和远处的空间层级。最终 prompt 必须保持参考图的人物形象方向、姿势、手势、垂直位置、主体大小、上下留白、左右留白、边界距离和可见范围，不要为了突出服装而自动放大人物、缩小人物、居中人物、移动镜头、扩展画幅、补全身体、补全道具或改变画面重心。无论参考图是不展示脚、不展示腿、不展示下半身、不展示躯干、不展示头部、只露出局部身体、只露出局部商品还是裁掉某个道具，最终 prompt 都必须写成同样的局部可见范围；参考图中完全不可见的身体部位、服饰部件、配饰、道具和背景区域不能出现在最终 prompt 中。商品图只负责提供要替换上身或穿戴的服饰主体本身，最终 prompt 只需要说明商品服饰穿在参考图人物对应部位，并描述它如何贴合参考图人物姿态、肩带/领口/腰线/裙摆/裤脚/袖口与动作和遮挡关系；商品外观细节以商品图为准，不要编造商品图里没有的设计。参考图中只有与商品覆盖区域重叠的旧衣结构需要清除；不在替换区域内的鞋帽、包袋、首饰和场景道具不能一律删除。凡是被手握持、承托或倚靠，遮挡人物主体，或明显决定轮廓与构图的大型道具，都必须保留其品类、尺寸、位置、遮挡和接触关系。参考图旧衣的颜色、图案、logo、文字、装饰、面料和款式不得残留，最终被替换区域的可见服饰外观必须来自商品图。如果商品图中也出现真人、模特、手臂、脸、身体、发型、妆容、背景、道具或强动作，它们都不是人物模板和画面模板，不能写进最终 prompt，也不能覆盖参考图的人物形象、脸、发型、体态、人物姿势、手部位置、身体朝向、场景、拍摄角度、构图和可见范围；只能从商品图提取服饰本身的款式、廓形、颜色、图案、材质、开合、肩带、领口、袖长、下摆、裤脚、鞋型或帽型等穿着外观。严禁输出“需要保留、必须复刻、参考图负责、商品图负责、不要改变、最终 prompt 必须”等任务说明式句子；严禁只写“保留参考图的场景和姿态”这种空话。你应该输出类似“一张真实手机镜前自拍照片，一名与参考图性别呈现一致的成年人物坐在更衣室浅色墙面前的矮凳上……”这样的具体画面描述。不要擅自改性别、人数、景别、主体大小、坐站关系、镜面自拍方式、人物在画面中的垂直位置、上下留白比例、可见范围或主要道具。画面必须像真实手机或相机拍摄，不要出现 CGI、3D 渲染、插画、海报合成或过度广告精修感。不要输出解释、标题、分点或 JSON，只输出一整段最终 prompt。",
     "defaultUserPrompt": "",
     "imageSize": "1:1",
     "responseDataPath": "",
@@ -68,12 +77,13 @@ NON_APPAREL_HUMAN_CARRIER_RULES = (
 
 APPAREL_PROMPT_GUARDRAILS = (
     "补充硬规则：第二张商品图里只有用户真正要替换到人物身上的服饰主体可以进入最终 prompt。"
+    "以下参考图旧服饰排除规则优先级最高，覆盖此前或用户自定义 SP 中任何保留参考图非目标服饰外观、服饰部件可见性、搭配细节或旧衣结构的要求。"
     "如果用户填写了商品主体说明，必须以该说明锁定单品；如果没有说明，则只选第二张图中最主要、最居中、最像商品展示主体的一件服饰单品。"
     "如果第二张商品图是穿搭拆解图、拼贴图、红框标注图或带品牌标注的搭配图，必须优先识别红框/连线/局部放大框所指向的服饰商品，尤其是画面中心人物身上被重点标注的上衣、外套、裤装、裙装或鞋帽；这些标注框和品牌文字本身不能进入最终 prompt。"
     "如果商品主体说明明确写了套装、组合或同时列出多件服饰，则这些被点名的单品共同构成本次商品主体，必须逐件进入最终 prompt；不得再退化为只选择其中最居中的一件。"
     "必须先判断商品覆盖的身体区域，只替换与商品区域重叠的原服饰：上装只替换上身，裤装或裙装只替换下身，连衣裙或连体服才同时替换上下身，鞋帽与配饰也只替换各自区域。"
-    "参考图中不与商品覆盖区域重叠、且在画内真实可见的其他服饰必须保留其品类、颜色、长度、廓形、可见范围和遮挡关系；例如替换上装时不得凭空删除、改色或改造参考图中可见的裤装或裙装。"
-    "输出前必须自检：商品覆盖区域内不得残留参考图旧商品外观；商品覆盖区域外不得凭空删除或改造参考图原有服饰。只有原图该区域不可见或确实无法辨认时，才允许使用最简单的中性补全。"
+    "参考图中的旧服饰只用于判断身体哪些区域被覆盖、人物动作、遮挡、承重点和画面裁切；不得描述或继承其品类、颜色、材质、长度、廓形、领口、肩带、袖型、裁片、开口、图案、文字、Logo 或装饰。"
+    "输出前必须自检：商品覆盖区域内不得残留参考图旧商品结构或外观；商品覆盖区域外若需要维持身体覆盖连续性，只能使用无品牌、无图案、结构最简单且低存在感的中性补全，不能复原参考图旧服饰。"
     "第二张商品图中的背景、拍摄场景、墙面、商场、街道、文字标识、模特脸、发型、手势、身体比例、鞋帽、包袋、首饰、腰带、袜子、裤子、裙子、外套或其他搭配件默认全部是干扰，除非它们就是用户指定的商品主体。"
     "不能把第二张商品图里的整套穿搭照搬进最终 prompt；只能提取被锁定单品的款式、廓形、颜色、面料、领口、袖口、下摆、开合、图案等必要外观。"
     "第一张小红书参考图里的帽子、包袋、鞋子、首饰等若不是本次替换商品，但明显影响人物轮廓、动作接触或构图识别，应按参考图保留；它们不能反过来改变新商品结构。"
@@ -97,7 +107,7 @@ PRODUCT_STRUCTURE_GUARDRAILS = (
     "如果商品是服饰，必须精确写出领口类型、肩部覆盖范围、肩线与袖子的连接、袖长、门襟或开合方式、下摆和可见内外层关系；"
     "例如商品是有完整肩线和短袖的翻领上衣，就不得生成露肩、斜肩、无袖、吊带、额外肩带或断开的领口结构。"
     "如果商品是上装，它必须始终是边界清楚的独立上衣，衣摆与下装在腰胯区域形成明确分界，不得把上衣向下延伸成连衣裙、连体衣或与参考图旧裙摆融为一体。"
-    "新商品只覆盖自身对应的身体区域。画内其他区域优先保持参考图真实可见的非目标服饰；只有参考图该区域不可见、无法辨认，或旧连体服被上装替换后确实缺少独立下装时，才使用无品牌、无图案、结构最简单的中性补全。"
+    "新商品只覆盖自身对应的身体区域。画内其他身体区域只继承有无独立覆盖、动作、遮挡和裁切关系，不继承参考图旧服饰外观；需要补全时统一使用无品牌、无图案、结构最简单且低存在感的中性搭配。"
     "若商品主体是包含上装与下装的套装，必须同时清空并替换参考图上身和下身的旧服饰，逐件写清新上装与新下装；不得残留参考图原裤子、原裙子、原腰线、原袜口或其他落在商品覆盖区域内的旧结构。"
     "若商品图中的裤装是覆盖脚踝或接近鞋面的全长长裤，必须保持商品原有裤长和裤脚垂落方式；参考图袜子一律不继承，不得为了露出旧袜子而卷起、缩短、束紧或堆叠新裤脚。只有用户明确把袜子列为商品主体时才允许生成袜子。"
     "鞋袜、帽子、包袋、首饰等商品覆盖区域外的搭配件要先做兼容判断，而不是机械保留：仍在画内可见且与新商品覆盖范围不冲突时按参考图保留；若新长裤或长裙已遮住脚踝与袜口，原袜子必须删除。只有不承担动作、遮挡或构图作用的低存在感配饰在明显冲突时才可删除或简化；被手握持、托举、倚靠，遮挡躯干，或占画面宽高约10%以上的标志性道具无论风格是否协调都必须保留，不能缩小、换品类或删除。"
@@ -126,10 +136,10 @@ SCENE_REPLICATION_GUARDRAILS = (
     "如果参考图是近距离手持自拍、斜线构图、身体侧倾、单臂伸出画外或非对称姿势，最终图不得自动改成正面站立、躯干竖直、双肩水平、双臂对称、手放身侧、模特展示或标准站姿。"
     "参考图为三分之二侧身或近侧面时，必须额外锁定画面中可见的脸部比例、鼻尖朝向、近侧肩髋、远侧肩髋被遮挡程度以及胸腹侧轮廓；最终 prompt 必须直接写‘保持三分之二侧身/近侧面，禁止转成正面’，不得只写朝向角度后又用正面展示、面对镜头等词覆盖。"
     "换脸只改变人物身份，不等于更换身体。参考图中可见的肤色明度与冷暖、肩宽、胸部相对肩宽与腰宽的前向体积、胸腰比、腰胯宽度、躯干厚度、可见腿长相对躯干的比例、四肢粗细和整体体型轮廓仍属于画面模板，必须保留，不能统一修成纤瘦、平胸、短腿、白皙或标准商业模特体型。"
-    "体型只按可见几何关系客观记录，不使用性感、丰满、完美身材等评价词；若参考图胸部体积突出、腰部收窄或可见腿部修长，最终人物必须保持同等级的胸部前向投影、胸腰差和腿身比，服饰只随人体自然起伏，不能把身体压平、加宽腰部或缩短双腿。"
+    "体型只按可见几何关系客观记录，不使用性感、丰满、完美身材等评价词；若参考图胸部体积突出、腰部收窄或可见腿部修长，最终人物必须保持同等级的胸部前向投影、胸腰差和腿身比，服饰只在商品原有覆盖范围和连续面料内随人体自然起伏，不能把身体压平、加宽腰部或缩短双腿。商品结构优先级始终高于体型表现：不得为了突出胸部而降低或扩大领口、拉开门襟、移动肩带锚点、缩窄胸前覆盖、增加露肤或事业线，也不得把高领、圆领、方领或完整胸前面料改成深V、低领、抹胸或文胸式结构。"
     "参考分析中的视觉核心特征属于画面辨识度最高的非身份信息，必须在最终 prompt 前三句内明确出现。若核心特征包含明显胸部前向体积、显著胸腰差、修长腿身比、成熟感或特定身体轴线，不能降级成‘匀称、纤细、标准身材’等平均化描述。"
     "仅当结构化参考分析明确给出 appearanceLock.bustLevel=prominent、bustConfidence=high，且 bustEvidence 至少包含两条彼此独立的身体轮廓证据时，最终 prompt 才必须直接写‘一名25至30岁的成年女性拥有明显丰满的大胸，胸部轮廓饱满突出，胸腰差明显’，不要解释衣料受力，也不要改写成胸部前向体积等分析术语。俯拍近大远小、低领露肤、紧身或宽松衣料、褶皱、单侧侧身轮廓、手臂挤压和裁切放大都不能作为大胸证据；置信度不足或 bustLevel=non_prominent/uncertain 时禁止写大胸、丰满突出或沙漏夸大。"
-    "若参考图确实可见事业线，并且商品本身具有可打开的V形门襟、低领或开放领口，则直接写‘可见与参考图相同程度的事业线’；商品结构不支持时只保留大胸描述，不增加开口、吊带或其他结构。"
+    "若参考图确实可见事业线，并且商品本身清楚具有足以自然露出该区域的低领或开放领口，才可写‘可见与商品领口自然允许范围一致的事业线’，露肤范围不得超过商品结构；商品结构不支持时只保留体型，不写事业线，不降低领口，不增加开口、吊带或其他结构。"
     "换脸时只改变可识别身份，不改变人物的成人年龄段、视觉成熟度、表情强度、视线关系、嘴部微表情状态和整体角色感；不得把成熟人物自动改成幼态、甜妹、学生感或标准网红脸，也不得反向增龄。"
     "嘴部微表情必须作为非身份硬锁独立记录和执行：写清上下唇是完全闭合、轻触、微张还是明显张开，是否存在唇间缝隙，牙齿或舌头是否可见，画面左侧与右侧嘴角分别上扬、水平、下压或收紧，以及下颌是放松还是轻微绷紧。原图闭唇时禁止自动改成微张嘴、露齿笑、嘟嘴或明显微笑；原图微张时也不得自动闭合。只继承开合、受力和方向，不继承具体唇形、厚度、轮廓或身份特征。"
     "动作复刻不仅要写关节方向，还必须写清手与脸、头发、腰胯、手机、桌面或其他可见物体的接触点，以及哪条肢体在前、哪条在后；不得把交叉、支撑、遮挡或伸出画外的动作改成相邻但不接触的姿势。"
@@ -327,20 +337,45 @@ def detect_faces_endpoint(body):
 
 def replicate(body):
     image_url = body.get("imageUrl", "")
+    product_image_data_urls = body.get("productImageDataUrls")
+    if not isinstance(product_image_data_urls, list):
+        product_image_data_urls = []
+    product_image_data_urls = [
+        item for item in product_image_data_urls if isinstance(item, str) and item.strip()
+    ]
     product_image_data_url = body.get("productImageDataUrl", "")
+    if not product_image_data_urls and product_image_data_url:
+        product_image_data_urls = [product_image_data_url]
     if not image_url:
         error = Exception("imageUrl is required.")
         error.status_code = 400
         raise error
-    if not product_image_data_url:
-        error = Exception("productImageDataUrl is required.")
+    if not product_image_data_urls:
+        error = Exception("productImageDataUrls is required.")
         error.status_code = 400
         raise error
 
     settings = build_settings(body)
     init_progress(settings, body.get("progressId"), body.get("generationPath"))
     reference_data_url = convert_image_url_to_data_url(image_url)
-    product_data_url = normalize_data_url(product_image_data_url)
+    supplied_guide = body.get("compositionGuideDataUrl")
+    if isinstance(supplied_guide, str) and supplied_guide.strip():
+        settings["compositionGuideDataUrl"] = normalize_data_url(supplied_guide)
+        settings["compositionGuideType"] = (
+            str(body.get("compositionGuideType") or "external").strip().lower()
+        )
+    else:
+        depth_started_at = time.monotonic()
+        settings["compositionGuideDataUrl"] = build_depth_composition_guide(reference_data_url)
+        settings["compositionGuideType"] = "depth"
+        append_timing(
+            settings.get("timings"),
+            "depth_composition_guide",
+            "local/depth-anything-v2-vits-170-8-8-95",
+            depth_started_at,
+        )
+    product_data_urls = [normalize_data_url(item) for item in product_image_data_urls]
+    product_data_url = product_data_urls[0]
 
     generation_path = normalize_generation_path(body.get("generationPath"))
     if not generation_path:
@@ -350,9 +385,9 @@ def replicate(body):
 
     try:
         if generation_path == "apparel":
-            result = replicate_apparel(reference_data_url, product_data_url, settings, generation_path)
+            result = replicate_apparel(reference_data_url, product_data_urls, settings, generation_path)
         else:
-            result = replicate_non_apparel(reference_data_url, product_data_url, settings, generation_path)
+            result = replicate_non_apparel(reference_data_url, product_data_urls, settings, generation_path)
         set_progress(settings, 999, "生成完成", status="done")
         return result
     except Exception:
@@ -381,10 +416,11 @@ def build_settings(body):
     }
 
 
-def replicate_non_apparel(reference_data_url, product_data_url, settings, generation_path):
+def replicate_non_apparel(reference_data_url, product_data_urls, settings, generation_path):
     set_progress(settings, 0, "正在分析参考图")
-    prompt = compose_non_apparel_prompt(reference_data_url, product_data_url, settings)
+    prompt = compose_non_apparel_prompt(reference_data_url, product_data_urls, settings)
     set_progress(settings, 1, "Prompt 已生成")
+    final_reference_images = build_generation_reference_images(product_data_urls, settings)
     final_image_prompt = (
         f"{prompt}"
         " 全局白平衡、冷暖、饱和度、对比、高光阴影和成像质感严格按文字 prompt 执行。"
@@ -394,15 +430,16 @@ def replicate_non_apparel(reference_data_url, product_data_url, settings, genera
         f"{NON_APPAREL_HUMAN_CARRIER_RULES}"
         "文字 prompt 中的躯干倾斜、躯干旋转、肩线斜率、髋肩扭转、左右手臂方向、肘部弯曲和手部出画关系是动作硬约束。"
         "不得把近距离斜向自拍、侧倾躯干或单臂伸出画外的姿势改成正面站立、躯干竖直、双肩水平、双臂对称或标准商品展示姿势。"
+        f"{build_composition_guide_rule(len(product_data_urls), settings.get('compositionGuideType'))}"
     )
     set_progress(settings, 2, "正在生成图片")
     try:
         result_image_url, image_request_debug = generate_image(
-            final_image_prompt, settings, [product_data_url]
+            final_image_prompt, settings, final_reference_images
         )
     except Exception as error:
         debug = build_image_request_debug_from_values(
-            settings["model"], build_image_config(settings["imageSize"]).get("image_config", {}), final_image_prompt, [product_data_url]
+            settings["model"], build_image_config(settings["imageSize"]).get("image_config", {}), final_image_prompt, final_reference_images
         )
         attach_debug_to_error(error, debug)
         raise
@@ -419,7 +456,7 @@ def replicate_non_apparel(reference_data_url, product_data_url, settings, genera
     }
 
 
-def replicate_apparel(reference_data_url, product_data_url, settings, generation_path):
+def replicate_apparel(reference_data_url, product_data_urls, settings, generation_path):
     set_progress(settings, 0, "正在分析参考图")
     face_identity_mode = settings.get("faceIdentityMode") or "regenerate"
     reference_analysis = analyze_apparel_reference(reference_data_url, settings, face_identity_mode)
@@ -429,7 +466,7 @@ def replicate_apparel(reference_data_url, product_data_url, settings, generation
     reference_description = reference_analysis["referenceDescription"]
     set_progress(settings, 1, "正在融合参考图和商品服饰约束")
     final_prompt = compose_apparel_final_prompt(
-        product_data_url,
+        product_data_urls,
         reference_analysis,
         settings,
         face_identity_mode,
@@ -437,13 +474,13 @@ def replicate_apparel(reference_data_url, product_data_url, settings, generation
     final_prompt = enforce_flash_exposure_consistency(final_prompt, reference_analysis)
     set_progress(settings, 2, "最终 Prompt 已生成，正在调用生图模型")
     if face_identity_mode == "preserve_reference":
-        final_reference_images = [product_data_url]
+        final_reference_images = build_generation_reference_images(product_data_urls, settings)
         identity_rule = (
             "当前输入图只提供商品外观，不提供人物身份；按主体描述保留原图的成人年龄段、发型轮廓、表情与脸部可见性，"
             "不要学习商品图中的人物。"
         )
     else:
-        final_reference_images = [product_data_url]
+        final_reference_images = build_generation_reference_images(product_data_urls, settings)
         if reference_has_face:
             identity_rule = (
                 "当前输入图只提供商品外观，不提供人物身份；生成与参考图和商品图均不同的成年新人脸，"
@@ -456,6 +493,8 @@ def replicate_apparel(reference_data_url, product_data_url, settings, generation
                 "仅当参考分析确认面部确实入画时才生成不同身份的成年新人脸，且不得改变景别、裁切、姿势和构图。"
             )
     bust_execution_rule = build_reference_bust_execution_lock_text(reference_analysis)
+    if reference_analysis.get("appearanceLock", {}).get("genderPresentation") == "male":
+        bust_execution_rule = ""
     direct_user_prompt = str(settings.get("userPrompt") or "").strip()
     final_image_prompt = build_legacy_apparel_image_prompt(
         final_prompt=final_prompt,
@@ -464,6 +503,9 @@ def replicate_apparel(reference_data_url, product_data_url, settings, generation
         identity_rule=identity_rule,
         user_prompt=direct_user_prompt,
         product_subject_hint=str(settings.get("productSubjectHint") or "").strip(),
+    )
+    final_image_prompt += build_composition_guide_rule(
+        len(product_data_urls), settings.get("compositionGuideType")
     )
     try:
         result_image_url, image_request_debug = generate_image(
@@ -486,6 +528,7 @@ def replicate_apparel(reference_data_url, product_data_url, settings, generation
         "timings": settings["timings"],
         "referenceHasFace": reference_has_face,
         "referenceFaceReason": face_reason,
+        "referenceLayoutLock": reference_analysis.get("layoutLock") or {},
         "referenceFrameLock": reference_analysis.get("frameLock") or {},
         "referenceAppearanceLock": reference_analysis.get("appearanceLock") or {},
         "referenceCameraLock": reference_analysis.get("cameraLock") or {},
@@ -639,6 +682,9 @@ def normalize_reference_frame_lock(value):
             source.get("shotScaleClass"),
             {"close_up", "medium", "three_quarter", "near_full", "full", "environmental"},
         ),
+        "horizontalPlacementEvidence": str(
+            source.get("horizontalPlacementEvidence") or ""
+        ).strip(),
         "scalePriorityCue": str(source.get("scalePriorityCue") or "").strip(),
     }
     if "topPersonY" in source:
@@ -648,6 +694,32 @@ def normalize_reference_frame_lock(value):
             pass
     box = result.get("visiblePersonBox")
     if isinstance(box, dict) and box:
+        center_x = box["x"] + box["width"] / 2
+        left_margin = box["x"]
+        right_margin = max(0, 1000 - box["x"] - box["width"])
+        result["subjectCenterX"] = int(round(center_x))
+        if center_x < 460:
+            result["horizontalPlacement"] = "left"
+        elif center_x > 540:
+            result["horizontalPlacement"] = "right"
+        else:
+            result["horizontalPlacement"] = "center"
+        if left_margin - right_margin >= 60:
+            result["dominantNegativeSpace"] = "left"
+        elif right_margin - left_margin >= 60:
+            result["dominantNegativeSpace"] = "right"
+        else:
+            result["dominantNegativeSpace"] = "balanced"
+        edge_contacts = []
+        if left_margin <= 20:
+            edge_contacts.append("left")
+        if right_margin <= 20:
+            edge_contacts.append("right")
+        if box["y"] <= 20:
+            edge_contacts.append("top")
+        if 1000 - box["y"] - box["height"] <= 20:
+            edge_contacts.append("bottom")
+        result["edgeContacts"] = edge_contacts
         box_top = box["y"]
         top_person_y = result.get("topPersonY")
         if not isinstance(top_person_y, int):
@@ -666,6 +738,91 @@ def normalize_reference_frame_lock(value):
                     cue + "；顶部留白双测量冲突时采用较大留白，人物超框时缩小人物并后退镜头"
                 ).strip("；")
     return result
+
+
+def normalize_reference_layout_lock(value, fallback_text=""):
+    source = value if isinstance(value, dict) else {}
+    layout_type = normalize_enum(source.get("layoutType"), {"single", "grid"})
+
+    def positive_int(raw_value, default=0):
+        try:
+            return max(0, int(round(float(raw_value))))
+        except (TypeError, ValueError):
+            return default
+
+    rows = positive_int(source.get("rows"))
+    columns = positive_int(source.get("columns"))
+    panel_count = positive_int(source.get("panelCount"))
+    evidence_text = f"{fallback_text} {json.dumps(source, ensure_ascii=False)}"
+
+    known_grids = (
+        (r"(?:四宫格|四格|4格|2\s*[x×X*]\s*2)", 2, 2, 4),
+        (r"(?:九宫格|九格|9格|3\s*[x×X*]\s*3)", 3, 3, 9),
+        (r"(?:六宫格|六格|6格|2\s*[x×X*]\s*3|3\s*[x×X*]\s*2)", 2, 3, 6),
+    )
+    if layout_type != "grid":
+        for pattern, detected_rows, detected_columns, detected_count in known_grids:
+            if re.search(pattern, evidence_text, flags=re.IGNORECASE):
+                layout_type = "grid"
+                rows = rows or detected_rows
+                columns = columns or detected_columns
+                panel_count = panel_count or detected_count
+                break
+    if layout_type != "grid" and re.search(r"多宫格|拼图|对比图|分格", evidence_text):
+        layout_type = "grid"
+
+    if layout_type != "grid":
+        return {"layoutType": "single"}
+
+    if not panel_count and rows and columns:
+        panel_count = rows * columns
+    if not rows and not columns and panel_count == 4:
+        rows, columns = 2, 2
+    elif not rows and not columns and panel_count == 9:
+        rows, columns = 3, 3
+
+    panels = []
+    raw_panels = source.get("panels")
+    if isinstance(raw_panels, list):
+        for index, raw_panel in enumerate(raw_panels):
+            panel = raw_panel if isinstance(raw_panel, dict) else {"pose": raw_panel}
+            normalized = {
+                "position": str(panel.get("position") or f"第{index + 1}格").strip(),
+                "crop": str(panel.get("crop") or "").strip(),
+                "pose": normalize_screen_coordinate_text(panel.get("pose")),
+                "subjectPosition": str(panel.get("subjectPosition") or "").strip(),
+            }
+            if any(normalized.values()):
+                panels.append(normalized)
+
+    if not panels:
+        position_labels = ("左上格", "右上格", "左下格", "右下格")
+        for index, label in enumerate(position_labels):
+            match = re.search(
+                rf"{label}\s*[：:]\s*(.+?)(?=(?:左上格|右上格|左下格|右下格)\s*[：:]|$)",
+                evidence_text,
+            )
+            if match:
+                panels.append(
+                    {
+                        "position": label,
+                        "crop": "",
+                        "pose": normalize_screen_coordinate_text(match.group(1).strip("；;，,。 \"{}")),
+                        "subjectPosition": "",
+                    }
+                )
+    if not panel_count and panels:
+        panel_count = len(panels)
+
+    return {
+        "layoutType": "grid",
+        "rows": rows,
+        "columns": columns,
+        "panelCount": panel_count,
+        "dividerDescription": str(source.get("dividerDescription") or "").strip(),
+        "sharedContinuity": str(source.get("sharedContinuity") or "").strip(),
+        "panels": panels,
+    }
 
 
 def reconcile_reference_body_orientation(body_orientation):
@@ -687,6 +844,190 @@ def reconcile_reference_body_orientation(body_orientation):
     return text
 
 
+REFERENCE_APPAREL_DETAIL_MARKERS = (
+    "待替换商品",
+    "原商品",
+    "原服饰",
+    "旧服饰",
+    "旧衣",
+    "上衣",
+    "内搭",
+    "外套",
+    "背心",
+    "吊带",
+    "肩带",
+    "领口",
+    "衣领",
+    "袖口",
+    "袖片",
+    "下摆",
+    "衣摆",
+    "裤装",
+    "裤腰",
+    "裤脚",
+    "裙装",
+    "裙摆",
+    "裁片",
+    "拼接",
+    "开口",
+    "开衩",
+    "镂空",
+    "门襟",
+    "纽扣",
+    "拉链",
+    "口袋",
+    "面料",
+    "布料",
+    "服装图案",
+    "衣物图案",
+    "服装文字",
+    "衣物文字",
+    "服装标签",
+    "衣物标签",
+    "衣料",
+    "低领",
+    "高领",
+    "圆领",
+    "V领",
+    "露肩",
+    "单肩",
+    "无袖",
+    "短袖",
+    "长袖",
+    "收腰",
+    "宽松",
+    "紧身",
+    "褶皱",
+    "连衣裙",
+    "半身裙",
+    "短裤",
+    "长裤",
+    "服饰颜色",
+    "衣服颜色",
+    "腰线",
+)
+
+
+def strip_reference_apparel_clauses(value):
+    """Remove old-garment clauses while preserving body, action and prop geometry."""
+    text = str(value or "").strip()
+    if not text or not any(marker in text for marker in REFERENCE_APPAREL_DETAIL_MARKERS):
+        return text
+    clauses = re.split(r"[，,；;。]+", text)
+    kept = [
+        clause.strip()
+        for clause in clauses
+        if clause.strip()
+        and not any(marker in clause for marker in REFERENCE_APPAREL_DETAIL_MARKERS)
+    ]
+    return "，".join(kept)
+
+
+def sanitize_reference_apparel_list(value, limit=None):
+    sanitized = []
+    for item in normalize_text_list(value):
+        clean = strip_reference_apparel_clauses(item)
+        if clean and clean not in sanitized:
+            sanitized.append(clean)
+    return sanitized[:limit] if isinstance(limit, int) else sanitized
+
+
+def normalize_non_target_wardrobe_coverage(value):
+    """Keep only coarse coverage needed for replacement; never retain old styling details."""
+    text = "；".join(normalize_text_list(value))
+    if not text:
+        return []
+    coverage = []
+    if any(marker in text for marker in ("上身", "上装", "上衣", "内搭", "外套", "背心", "吊带")):
+        coverage.append("上身区域存在独立非目标服饰覆盖")
+    if any(marker in text for marker in ("下身", "下装", "裤", "裙")):
+        coverage.append("下身区域存在独立非目标服饰覆盖")
+    if any(marker in text for marker in ("鞋", "袜", "脚部")):
+        coverage.append("脚部区域存在独立非目标服饰覆盖")
+    if any(marker in text for marker in ("帽", "头饰")):
+        coverage.append("头部区域存在独立非目标配饰覆盖")
+    if any(marker in text for marker in ("首饰", "项链", "耳饰", "耳环", "手链", "戒指")):
+        coverage.append("身体局部存在独立非目标配饰覆盖")
+    return coverage
+
+
+NON_TARGET_WEARABLE_MARKERS = (
+    "鞋",
+    "袜",
+    "靴",
+    "帽",
+    "头饰",
+    "发饰",
+    "包",
+    "项链",
+    "耳环",
+    "耳饰",
+    "手链",
+    "手镯",
+    "戒指",
+    "眼镜",
+    "墨镜",
+    "围巾",
+)
+
+NON_TARGET_WEARABLE_FORBIDDEN_MARKERS = (
+    "上衣",
+    "上装",
+    "外套",
+    "衬衫",
+    "T恤",
+    "卫衣",
+    "毛衣",
+    "针织衫",
+    "开衫",
+    "夹克",
+    "风衣",
+    "西装",
+    "西服",
+    "背心",
+    "吊带",
+    "打底衫",
+    "内搭",
+    "套装",
+    "连体衣",
+    "连体裤",
+    "连衣裙",
+    "半身裙",
+    "裙装",
+    "裙子",
+    "短裤",
+    "长裤",
+    "裤装",
+    "裤子",
+    "下装",
+    "衣身",
+    "服装主体",
+    "旧服饰",
+    "裤腰",
+    "领口",
+    "袖口",
+    "肩带",
+    "下摆",
+)
+
+
+def sanitize_non_target_wearables(value, limit=8):
+    """Keep visible peripheral items without leaking the old target garment."""
+    sanitized = []
+    for item in normalize_text_list(value):
+        for clause in re.split(r"[；;。]+", str(item)):
+            clean = clause.strip(" ，,")
+            if not clean:
+                continue
+            if not any(marker in clean for marker in NON_TARGET_WEARABLE_MARKERS):
+                continue
+            if any(marker in clean for marker in NON_TARGET_WEARABLE_FORBIDDEN_MARKERS):
+                continue
+            if clean not in sanitized:
+                sanitized.append(clean)
+    return sanitized[:limit]
+
+
 def normalize_reference_appearance_lock(value):
     source = value if isinstance(value, dict) else {}
     direction_audit_source = source.get("directionAudit")
@@ -704,32 +1045,33 @@ def normalize_reference_appearance_lock(value):
         "noseTipX": normalize_direction_x(direction_audit_source.get("noseTipX")),
         "evidence": str(direction_audit_source.get("evidence") or "").strip(),
     }
-    contact_noise = (
-        "待替换商品",
-        "原商品",
-        "原服饰",
-        "上衣",
-        "内搭",
-        "外套",
-        "肩带",
-        "领口",
-        "袖口",
-        "下摆",
-        "裤装",
-        "裤腰",
-        "裙装",
-        "裙摆",
-        "鞋子",
-    )
-    pose_contacts = [
-        item
-        for item in normalize_text_list(source.get("poseContacts"))
-        if not any(noise in item for noise in contact_noise)
-    ]
+    hand_position_audit = []
+    raw_hand_audit = source.get("handPositionAudit")
+    if isinstance(raw_hand_audit, list):
+        for item in raw_hand_audit[:4]:
+            if not isinstance(item, dict):
+                continue
+            center_x = normalize_direction_x(item.get("centerX"))
+            center_y = normalize_direction_x(item.get("centerY"))
+            if center_x is None:
+                continue
+            # Screen side is derived from the measured x coordinate, never trusted
+            # from a free-form left/right label returned by the vision model.
+            screen_side = "left" if center_x < 500 else "right"
+            hand_position_audit.append(
+                {
+                    "screenSide": screen_side,
+                    "centerX": center_x,
+                    "centerY": center_y,
+                    "contact": strip_reference_apparel_clauses(item.get("contact")),
+                    "visibility": str(item.get("visibility") or "").strip(),
+                    "evidence": strip_reference_apparel_clauses(item.get("evidence")),
+                }
+            )
+    hand_position_audit.sort(key=lambda item: item["centerX"])
+    pose_contacts = sanitize_reference_apparel_list(source.get("poseContacts"))
     visual_salience = "、".join(
-        item
-        for item in normalize_text_list(source.get("visualSalience"))
-        if not any(noise in item for noise in contact_noise)
+        sanitize_reference_apparel_list(source.get("visualSalience"))
     )
     bust_level = normalize_enum(
         source.get("bustLevel"), {"prominent", "non_prominent", "uncertain"}, "uncertain"
@@ -738,7 +1080,9 @@ def normalize_reference_appearance_lock(value):
         source.get("bustConfidence"), {"high", "medium", "low"}, "low"
     )
     bust_evidence = normalize_text_list(source.get("bustEvidence"))
-    body_proportions = str(source.get("bodyProportions") or "").strip()
+    body_proportions = strip_reference_apparel_clauses(
+        source.get("bodyProportions")
+    )
     bust_clause = re.search(r"胸部[^；。]*", body_proportions)
     if bust_level == "prominent" and bust_clause and any(
         qualifier in bust_clause.group(0)
@@ -799,6 +1143,39 @@ def normalize_reference_appearance_lock(value):
             item for item in re.split(r"[、；]", visual_salience) if item and "胸" not in item
         )
     visible_skin_tone = str(source.get("visibleSkinTone") or "").strip()
+    gender_presentation = normalize_enum(
+        source.get("genderPresentation"), {"male", "female", "uncertain"}, "uncertain"
+    )
+    if gender_presentation == "uncertain":
+        gender_evidence = "；".join(
+            str(source.get(key) or "")
+            for key in ("subjectPresence", "demographicAppearance")
+        )
+        male_evidence = any(
+            marker in gender_evidence for marker in ("成年男性", "年轻男性", "男性人物", "男士")
+        )
+        female_evidence = any(
+            marker in gender_evidence for marker in ("成年女性", "年轻女性", "女性人物", "女士")
+        )
+        if male_evidence and not female_evidence:
+            gender_presentation = "male"
+        elif female_evidence and not male_evidence:
+            gender_presentation = "female"
+    if gender_presentation == "male":
+        # Female apparel photography can otherwise leak bust cues into a male reference.
+        bust_level = "non_prominent"
+        bust_confidence = "high"
+        bust_evidence = []
+        body_proportions = re.sub(
+            r"胸部.*?(?=(?:[，,](?:胸腰|腰部|腰胯|可见腿|腿部|大腿|小腿))|[；。]|$)",
+            "男性胸廓保持参考图可见的自然比例",
+            body_proportions,
+        )
+        visual_salience = "、".join(
+            item
+            for item in re.split(r"[、；]", visual_salience)
+            if item and not any(marker in item for marker in ("胸", "乳", "沙漏"))
+        )
     lighting_mode = normalize_enum(
         source.get("lightingMode"),
         {
@@ -902,7 +1279,7 @@ def normalize_reference_appearance_lock(value):
     elif lighting_mode not in {"near_axis_flash", "fill_flash"}:
         flash_evidence = []
         flash_confidence = "low"
-    action_keyframe = str(source.get("actionKeyframe") or "").strip()
+    action_keyframe = strip_reference_apparel_clauses(source.get("actionKeyframe"))
     pose_text = "；".join([action_keyframe, *pose_contacts])
     selfie_relation = str(source.get("selfieRelation") or "").strip()
     capture_type = normalize_enum(
@@ -951,7 +1328,9 @@ def normalize_reference_appearance_lock(value):
         if not selfie_relation or "自拍" in selfie_relation:
             selfie_relation = "他拍或定时遥控拍摄，不得把任一只已执行动作的手改成持机手"
 
-    direction_anchors = normalize_text_list(source.get("directionAnchors"))[:6]
+    direction_anchors = sanitize_reference_apparel_list(
+        source.get("directionAnchors"), limit=6
+    )
     if not direction_anchors:
         for value in (
             str(source.get("bodyOrientation") or "").strip(),
@@ -1092,14 +1471,19 @@ def normalize_reference_appearance_lock(value):
         if "不是棚拍" not in environment_realism:
             environment_realism += "；必须保持真实场所层级，不得简化成棚拍黑幕或无缝纯色背景"
     return {
+        "genderPresentation": gender_presentation,
         "visibleSkinTone": visible_skin_tone,
         "facialSkinRendering": str(source.get("facialSkinRendering") or "").strip(),
-        "bodySilhouette": str(source.get("bodySilhouette") or "").strip(),
+        "bodySilhouette": strip_reference_apparel_clauses(
+            source.get("bodySilhouette")
+        ),
         "bodyProportions": body_proportions,
         "bustLevel": bust_level,
         "bustConfidence": bust_confidence,
-        "bustPerspectiveRisk": str(source.get("bustPerspectiveRisk") or "").strip(),
-        "bustEvidence": bust_evidence,
+        "bustPerspectiveRisk": strip_reference_apparel_clauses(
+            source.get("bustPerspectiveRisk")
+        ),
+        "bustEvidence": sanitize_reference_apparel_list(bust_evidence),
         "visualSalience": visual_salience,
         "subjectPresence": str(source.get("subjectPresence") or "").strip(),
         "mouthMicroExpression": str(source.get("mouthMicroExpression") or "").strip(),
@@ -1110,17 +1494,33 @@ def normalize_reference_appearance_lock(value):
             str(source.get("bodyOrientation") or "").strip()
         ),
         "directionAudit": direction_audit,
+        "handPositionAudit": hand_position_audit,
         "actionKeyframe": action_keyframe,
-        "limbTopology": str(source.get("limbTopology") or "").strip(),
-        "forbiddenPoseFallback": str(source.get("forbiddenPoseFallback") or "").strip(),
+        "limbTopology": strip_reference_apparel_clauses(
+            source.get("limbTopology")
+        ),
+        "forbiddenPoseFallback": strip_reference_apparel_clauses(
+            source.get("forbiddenPoseFallback")
+        ),
         "directionAnchors": direction_anchors,
         "captureType": capture_type,
         "phoneVisible": phone_visible,
         "selfieRelation": selfie_relation,
-        "foregroundObjectGeometry": str(source.get("foregroundObjectGeometry") or "").strip(),
-        "nonTargetWardrobe": normalize_text_list(source.get("nonTargetWardrobe")),
-        "poseSurfaceGeometry": str(source.get("poseSurfaceGeometry") or "").strip(),
-        "locomotionGeometry": str(source.get("locomotionGeometry") or "").strip(),
+        "foregroundObjectGeometry": strip_reference_apparel_clauses(
+            source.get("foregroundObjectGeometry")
+        ),
+        "nonTargetWardrobe": normalize_non_target_wardrobe_coverage(
+            source.get("nonTargetWardrobe")
+        ),
+        "nonTargetWearables": sanitize_non_target_wearables(
+            source.get("nonTargetWearables")
+        ),
+        "poseSurfaceGeometry": strip_reference_apparel_clauses(
+            source.get("poseSurfaceGeometry")
+        ),
+        "locomotionGeometry": strip_reference_apparel_clauses(
+            source.get("locomotionGeometry")
+        ),
         "lightingPhysics": str(source.get("lightingPhysics") or "").strip(),
         "lightingMode": lighting_mode,
         "flashEvidence": flash_evidence,
@@ -1134,8 +1534,12 @@ def normalize_reference_appearance_lock(value):
         "globalColorBiasStrength": global_color_bias_strength,
         "neutralAnchorAudit": neutral_anchor_audit,
         "toneProfile": tone_profile,
-        "faceVisibility": str(source.get("faceVisibility") or "").strip(),
-        "postureAndSupport": str(source.get("postureAndSupport") or "").strip(),
+        "faceVisibility": strip_reference_apparel_clauses(
+            source.get("faceVisibility")
+        ),
+        "postureAndSupport": strip_reference_apparel_clauses(
+            source.get("postureAndSupport")
+        ),
         "headPoseRange": str(source.get("headPoseRange") or "").strip(),
         "captureMode": capture_mode,
         "ccdEvidence": ccd_evidence,
@@ -1392,7 +1796,9 @@ def build_reference_description_from_fields(data, frame):
     ):
         value = str(data.get(key) or "").strip() if isinstance(data, dict) else ""
         if value:
-            parts.append(value.rstrip("。"))
+            clean = strip_reference_apparel_clauses(value)
+            if clean:
+                parts.append(clean.rstrip("。"))
     if not parts:
         scene_elements = normalize_text_list(frame.get("visibleSceneElements"))
         if scene_elements:
@@ -1401,7 +1807,7 @@ def build_reference_description_from_fields(data, frame):
 
 
 def remove_reference_product_appearance(value):
-    text = str(value or "").strip()
+    text = strip_reference_apparel_clauses(value)
     if not text:
         return ""
     sentences = []
@@ -1453,6 +1859,8 @@ def build_reference_frame_lock_text(reference_analysis):
         height_ratio = box["height"] / 10
         right_margin = max(0, 1000 - box["x"] - box["width"]) / 10
         bottom_margin = max(0, 1000 - box["y"] - box["height"]) / 10
+        center_x = (box["x"] + box["width"] / 2) / 10
+        center_y = (box["y"] + box["height"] / 2) / 10
         horizontal_background = max(0, 100 - width_ratio)
         vertical_background = max(0, 100 - height_ratio)
         parts.append(
@@ -1465,6 +1873,38 @@ def build_reference_frame_lock_text(reference_analysis):
             f"左、右、上、下边距分别约为{left_margin:.1f}%、{right_margin:.1f}%、"
             f"{top_margin:.1f}%、{bottom_margin:.1f}%，禁止放大、缩小、拉远、推进或重新居中"
         )
+        placement = str(frame.get("horizontalPlacement") or "").strip()
+        negative_space = str(frame.get("dominantNegativeSpace") or "").strip()
+        placement_label = {"left": "画面左侧", "center": "画面中央", "right": "画面右侧"}.get(
+            placement, "原横向位置"
+        )
+        negative_space_label = {"left": "画面左侧", "right": "画面右侧"}.get(
+            negative_space
+        )
+        placement_text = (
+            f"人物视觉中心固定在整图({center_x:.1f}%,{center_y:.1f}%)，属于{placement_label}构图"
+        )
+        if placement != "center":
+            placement_text += "，这是明确的偏置构图而非居中构图，禁止把脸、胸口或人物外接框移回中轴线"
+        if negative_space_label:
+            placement_text += f"；主要背景负空间保留在{negative_space_label}"
+        parts.append("人物横向落点硬锁：" + placement_text)
+        placement_evidence = str(frame.get("horizontalPlacementEvidence") or "").strip()
+        if placement_evidence:
+            parts.append("横向位置像素证据：" + placement_evidence)
+        edge_contacts = set(normalize_text_list(frame.get("edgeContacts")))
+        edge_labels = {
+            "left": "左边缘",
+            "right": "右边缘",
+            "top": "上边缘",
+            "bottom": "下边缘",
+        }
+        if edge_contacts:
+            parts.append(
+                "人物贴边与裁切关系："
+                + "、".join(edge_labels[item] for item in ("left", "right", "top", "bottom") if item in edge_contacts)
+                + "存在人物像素贴边；必须保留相同贴边或自然裁切，不得为了完整展示人物而向画面中央移动"
+            )
         parts.append(
             "镜头距离硬上限："
             f"人物外接框宽度不得超过画面{width_ratio:.1f}%、高度不得超过{height_ratio:.1f}%；"
@@ -1594,6 +2034,7 @@ def build_reference_appearance_lock_text(reference_analysis):
         return ""
     parts = []
     for label, key in (
+        ("人物性别呈现", "genderPresentation"),
         ("可见肤色", "visibleSkinTone"),
         ("面部肤色与皮肤成像", "facialSkinRendering"),
         ("体型轮廓", "bodySilhouette"),
@@ -1631,24 +2072,49 @@ def build_reference_appearance_lock_text(reference_analysis):
         ("真实拍摄与成像特征", "captureRealism"),
         ("环境空间的真实成像", "environmentRealism"),
     ):
-        value = str(appearance.get(key) or "").strip()
+        value = strip_reference_apparel_clauses(appearance.get(key))
         if value:
             parts.append(f"{label}：{value}")
-    contacts = normalize_text_list(appearance.get("poseContacts"))
+    contacts = sanitize_reference_apparel_list(appearance.get("poseContacts"))
     if contacts:
         parts.append("动作接触与前后层级：" + "、".join(contacts))
-    direction_anchors = normalize_text_list(appearance.get("directionAnchors"))
+    hand_position_audit = appearance.get("handPositionAudit")
+    if isinstance(hand_position_audit, list) and hand_position_audit:
+        hand_items = []
+        for item in hand_position_audit:
+            if not isinstance(item, dict):
+                continue
+            side = "画面左侧" if item.get("screenSide") == "left" else "画面右侧"
+            position = f"中心坐标({item.get('centerX')},{item.get('centerY')})"
+            contact = str(item.get("contact") or "").strip()
+            visibility = str(item.get("visibility") or "").strip()
+            detail = "，".join(value for value in (position, contact, visibility) if value)
+            hand_items.append(f"{side}手：{detail}")
+        if hand_items:
+            parts.append("逐手坐标审计（优先级高于文字方向描述）：" + "；".join(hand_items))
+    direction_anchors = sanitize_reference_apparel_list(
+        appearance.get("directionAnchors")
+    )
     if direction_anchors:
         parts.append("不可互换的画面方向锚点：" + "、".join(direction_anchors))
     snapshot_imperfections = normalize_text_list(appearance.get("snapshotImperfections"))
     if snapshot_imperfections:
         parts.append("生活快照不完美证据：" + "、".join(snapshot_imperfections))
-    bust_evidence = normalize_text_list(appearance.get("bustEvidence"))
+    bust_evidence = sanitize_reference_apparel_list(appearance.get("bustEvidence"))
     if bust_evidence:
         parts.append("胸部显著度的独立轮廓证据：" + "、".join(bust_evidence))
     wardrobe = normalize_text_list(appearance.get("nonTargetWardrobe"))
     if wardrobe:
-        parts.append("参考图各身体区域的可见服饰：" + "、".join(wardrobe))
+        parts.append(
+            "商品未覆盖区域的粗粒度覆盖关系（不含任何旧服饰外观）："
+            + "、".join(wardrobe)
+        )
+    wearables = sanitize_non_target_wearables(appearance.get("nonTargetWearables"))
+    if wearables:
+        parts.append(
+            "商品未覆盖的可见鞋袜与配饰（保留其实际外观，不属于旧服装主体）："
+            + "、".join(wearables)
+        )
     flash_evidence = normalize_text_list(appearance.get("flashEvidence"))
     if flash_evidence:
         parts.append("闪光灯像素证据：" + "、".join(flash_evidence))
@@ -1677,12 +2143,39 @@ def build_reference_frame_execution_lock_text(reference_analysis):
         parts.append(shot_scale)
     box = frame.get("visiblePersonBox")
     if isinstance(box, dict) and box:
+        center_x = (box["x"] + box["width"] / 2) / 10
+        center_y = (box["y"] + box["height"] / 2) / 10
+        placement = str(frame.get("horizontalPlacement") or "").strip()
+        negative_space = str(frame.get("dominantNegativeSpace") or "").strip()
         parts.append(
             f"人物连同画内可见四肢的外接框宽约占{box['width'] / 10:.1f}%、高约占{box['height'] / 10:.1f}%"
         )
         parts.append(
             f"左、右边距约{box['x'] / 10:.1f}%、{max(0, 1000 - box['x'] - box['width']) / 10:.1f}%"
         )
+        placement_label = {"left": "画面左侧", "center": "画面中央", "right": "画面右侧"}.get(
+            placement, "参考图原位置"
+        )
+        placement_rule = f"人物中心固定在({center_x:.1f}%,{center_y:.1f}%)的{placement_label}"
+        if placement != "center":
+            placement_rule += "，明确禁止移到画面中央"
+        negative_space_label = {"left": "左侧", "right": "右侧"}.get(negative_space)
+        if negative_space_label:
+            placement_rule += f"，主要背景负空间位于画面{negative_space_label}"
+        parts.append(placement_rule)
+        edge_contacts = set(normalize_text_list(frame.get("edgeContacts")))
+        if edge_contacts:
+            edge_labels = {
+                "left": "左边缘",
+                "right": "右边缘",
+                "top": "上边缘",
+                "bottom": "下边缘",
+            }
+            parts.append(
+                "人物保持贴近"
+                + "、".join(edge_labels[item] for item in ("left", "right", "top", "bottom") if item in edge_contacts)
+                + "的原始裁切关系"
+            )
     top_person_y = frame.get("topPersonY")
     if isinstance(top_person_y, int):
         parts.append(f"人物任意可见像素上方连续保留约{top_person_y / 10:.1f}%纯场景空间")
@@ -1692,10 +2185,56 @@ def build_reference_frame_execution_lock_text(reference_analysis):
     if not parts:
         return ""
     return (
-        "成图景别执行锁（直接控制最终渲染，不得被服饰细节覆盖）："
+        "成图构图与景别执行锁（直接控制最终渲染，不得被服饰细节覆盖）："
         + "；".join(parts)
-        + "。即使商品在画面中显得较小，也禁止推进镜头、放大人物、改成更近景别或减少背景负空间。"
+        + "。即使商品在画面中显得较小，也禁止推进镜头、放大人物、改成更近景别、重新居中或交换左右背景负空间。"
     )
+
+
+def build_reference_layout_execution_lock_text(reference_analysis):
+    layout = reference_analysis.get("layoutLock") if isinstance(reference_analysis, dict) else {}
+    if not isinstance(layout, dict) or layout.get("layoutType") != "grid":
+        return ""
+    rows = layout.get("rows")
+    columns = layout.get("columns")
+    panel_count = layout.get("panelCount")
+    if rows == 2 and columns == 2 and panel_count == 4:
+        layout_name = "2×2四宫格"
+    elif rows and columns:
+        layout_name = f"{rows}×{columns}多宫格"
+    elif panel_count:
+        layout_name = f"{panel_count}格拼图"
+    else:
+        layout_name = "多宫格拼图"
+
+    parts = []
+    for panel in layout.get("panels") or []:
+        if not isinstance(panel, dict):
+            continue
+        details = [
+            str(panel.get("crop") or "").strip(),
+            str(panel.get("subjectPosition") or "").strip(),
+            normalize_screen_coordinate_text(panel.get("pose")),
+        ]
+        details = [detail for detail in details if detail]
+        if details:
+            parts.append(f"{panel.get('position') or '分格'}：{'，'.join(details)}")
+
+    divider = str(layout.get("dividerDescription") or "").strip()
+    continuity = str(layout.get("sharedContinuity") or "").strip()
+    lock = (
+        f"拼图版式最高优先级硬锁：最终输出必须是一张完整的{layout_name}，"
+        "各画格边界清楚、尺寸与排列严格沿用参考图；不得生成单张照片，不得只保留其中一格，"
+        "不得把多格动作合并成同一个人物姿势。每格都必须使用同一位新人物、同一件用户商品和参考图一致的背景光色，"
+        "但分别执行该格自己的构图、裁切、人物位置、表情和动作。"
+    )
+    if divider:
+        lock += f"分隔方式：{divider}。"
+    if continuity:
+        lock += f"跨格连续性：{continuity}。"
+    if parts:
+        lock += "逐格执行：" + "；".join(parts) + "。"
+    return lock
 
 
 def build_reference_direction_execution_lock_text(reference_analysis):
@@ -1936,6 +2475,36 @@ def build_core_replication_contract(reference_analysis):
         for value in normalize_text_list(appearance.get("poseContacts"))[:4]
     ]
     action_values.extend(value for value in contacts if value)
+    hand_audit_values = []
+    for item in appearance.get("handPositionAudit") or []:
+        if not isinstance(item, dict):
+            continue
+        center_x = item.get("centerX")
+        center_y = item.get("centerY")
+        if not isinstance(center_x, int) or not isinstance(center_y, int):
+            continue
+        side = "画面左侧" if center_x < 500 else "画面右侧"
+        details = compact_prompt_text(
+            "，".join(
+                str(value).strip()
+                for value in (
+                    item.get("contact"),
+                    item.get("visibility"),
+                    item.get("evidence"),
+                )
+                if str(value or "").strip()
+            ),
+            58,
+        )
+        audit = f"{side}手心约在({center_x / 10:.1f}%,{center_y / 10:.1f}%)"
+        if details:
+            audit += "，" + details
+        hand_audit_values.append(audit)
+    if hand_audit_values:
+        action_values.append(
+            "逐手坐标审计（坐标优先于其它左右文字）："
+            + "；".join(hand_audit_values[:2])
+        )
     if action_values:
         slots.append(
             "【动作·肢体拓扑】仅一名人物，人体只有正常两条手臂和两只手；"
@@ -1958,6 +2527,14 @@ def build_core_replication_contract(reference_analysis):
     person_values = [value for value in person_values if value]
     if person_values:
         slots.append("【人物状态·表情】" + "；".join(person_values))
+
+    wearables = sanitize_non_target_wearables(appearance.get("nonTargetWearables"))
+    if wearables:
+        slots.append(
+            "【非替换穿戴物】保留实际品类、颜色、结构和可见位置："
+            + "；".join(compact_prompt_text(value, 60) for value in wearables[:4])
+            + "；不得省略、改色或默认改成赤脚"
+        )
 
     background_values = [
         compact_prompt_text(value, 68)
@@ -2455,6 +3032,46 @@ def build_compact_reference_render_priority_prefix_v2(reference_analysis):
             pose_part += "；每只手仅有一个连续手腕、掌心和五指，禁止增生、折断、穿插和反关节"
         parts.append(pose_part)
 
+    hand_audit_values = []
+    for item in appearance.get("handPositionAudit") or []:
+        if not isinstance(item, dict):
+            continue
+        center_x = item.get("centerX")
+        center_y = item.get("centerY")
+        if not isinstance(center_x, int) or not isinstance(center_y, int):
+            continue
+        side = "画面左侧" if center_x < 500 else "画面右侧"
+        details = compact_prompt_text(
+            "，".join(
+                str(value).strip()
+                for value in (
+                    item.get("contact"),
+                    item.get("visibility"),
+                    item.get("evidence"),
+                )
+                if str(value or "").strip()
+            ),
+            42,
+        )
+        value = f"{side}手心({center_x / 10:.1f}%,{center_y / 10:.1f}%)"
+        if details:
+            value += "，" + details
+        hand_audit_values.append(value)
+    if hand_audit_values:
+        parts.append(
+            "逐手坐标硬锁："
+            + "；".join(hand_audit_values[:2])
+            + "；以横坐标判定画面左右，与其它方向文字冲突时以本项为准，禁止交换两手职责"
+        )
+
+    wearables = sanitize_non_target_wearables(appearance.get("nonTargetWearables"))
+    if wearables:
+        parts.append(
+            "非替换穿戴物硬锁："
+            + "；".join(compact_prompt_text(value, 52) for value in wearables[:4])
+            + "；保留品类、颜色、结构、位置和接触关系，不得省略或默认改成赤脚"
+        )
+
     skin = compact_prompt_text(appearance.get("visibleSkinTone"), 62)
     facial_skin = compact_prompt_text(appearance.get("facialSkinRendering"), 58)
     flash_evidence = normalize_text_list(appearance.get("flashEvidence"))
@@ -2556,6 +3173,7 @@ def build_apparel_capture_execution_rule(reference_analysis):
     capture_type = str(appearance.get("captureType") or "").strip()
     capture_mode = compact_prompt_text(appearance.get("captureMode"), 58)
     capture_realism = compact_prompt_text(appearance.get("captureRealism"), 92)
+    environment_realism = compact_prompt_text(appearance.get("environmentRealism"), 120)
     imperfections = [
         compact_prompt_text(value, 38)
         for value in normalize_text_list(appearance.get("snapshotImperfections"))[:2]
@@ -2563,7 +3181,28 @@ def build_apparel_capture_execution_rule(reference_analysis):
     imperfections = [value for value in imperfections if value]
     lighting_mode = str(appearance.get("lightingMode") or "").strip()
     ccd_evidence = normalize_text_list(appearance.get("ccdEvidence"))
+    daylight_evidence = [
+        compact_prompt_text(value, 46)
+        for value in normalize_text_list(appearance.get("daylightEvidence"))[:2]
+    ]
+    daylight_evidence = [value for value in daylight_evidence if value]
     focal = compact_prompt_text(camera.get("focalLength35mm"), 28)
+
+    capture_mode_lower = capture_mode.lower()
+    is_phone_capture = (
+        "手机" in capture_mode
+        or "iphone" in capture_mode_lower
+        or capture_type in {"selfie_phone_out_of_frame", "selfie_visible_phone"}
+    )
+    phone_snapshot_rule = (
+        "普通iPhone原相机实拍的日常生活快照，画面随性，非摆拍、非精心构图或打光；"
+        "保留手机自动曝光、自动白平衡的轻微局部波动、边缘数码锐化与不均匀清晰度"
+    )
+    camera_snapshot_rule = (
+        "消费级相机直出的真实生活快照，非商业写真；"
+        "保留参考图可见的自然曝光波动、镜头边缘软硬变化与不均匀清晰度"
+    )
+    capture_device_rule = phone_snapshot_rule if is_phone_capture else camera_snapshot_rule
 
     parts = []
     if capture_type == "selfie_phone_out_of_frame":
@@ -2576,21 +3215,52 @@ def build_apparel_capture_execution_rule(reference_analysis):
     if "CCD" in capture_mode.upper() and len(ccd_evidence) >= 2:
         parts.append("早期老旧CCD生活抓拍，仅保留可见的有限动态范围、压缩、锐化和白平衡漂移")
     elif lighting_mode in {"near_axis_flash", "fill_flash"}:
-        parts.append("昏暗环境近轴直闪手机快照，近亮远暗、贴轴硬影和局部高光按原图出现")
+        parts.append(
+            capture_device_rule
+            + "；昏暗环境近轴直闪，近亮远暗、贴轴硬影和局部高光按原图出现"
+        )
     elif lighting_mode == "direct_sun":
-        parts.append("普通手机原相机直射日光快照，保留硬光斑、清楚投影和有限动态范围，绝不补闪")
+        parts.append(
+            capture_device_rule
+            + "；直射日光下人物和背景共享同一太阳方向、曝光与白平衡；"
+            "保留硬光斑、清楚投影、受光面与背光面的自然亮度差和有限动态范围，绝不补闪"
+        )
+    elif lighting_mode == "diffuse_daylight":
+        parts.append(
+            capture_device_rule
+            + "；漫射日光下人物和背景共享同一自然天光；"
+            "保留环境遮挡造成的缓慢明暗渐变、自然接触阴影和现场综合色，禁止均匀棚拍柔光"
+        )
+    elif lighting_mode == "mixed":
+        parts.append(
+            capture_device_rule
+            + "；混合自然光下分别保留直射光、天空光和环境反射的方向、颜色与作用区域；"
+            "人物必须真实嵌入环境，禁止独立打亮人物或把背景处理成合成布景，绝不补闪"
+        )
     elif lighting_mode == "indoor_ambient":
-        parts.append("普通手机原相机室内环境光快照，保留现场色温、曝光波动和阴影层次，绝不补闪")
+        parts.append(
+            capture_device_rule
+            + "；室内现场光下人物和空间共享同一光源衰减；"
+            "保留现场色温、曝光波动、接触阴影和材质反光，禁止额外人像补光，绝不补闪"
+        )
     else:
-        parts.append("普通手机或消费级相机原相机生活快照，非摆拍、非商业精修")
+        parts.append(capture_device_rule)
 
     if capture_mode:
         parts.append(capture_mode)
     if capture_realism:
         parts.append(capture_realism)
+    if environment_realism:
+        parts.append("环境成像证据：" + environment_realism)
+    if daylight_evidence and lighting_mode not in {"near_axis_flash", "fill_flash"}:
+        parts.append("自然光证据必须肉眼可见：" + "、".join(daylight_evidence))
     if imperfections:
         parts.append("保留" + "、".join(imperfections))
-    parts.append("皮肤保留毛孔、绒毛和局部血色，锐度与曝光不完全均匀；禁止蜡像磨皮、生成式过锐和广告写真光")
+    parts.append(
+        "人物、商品和背景必须像同一次真实曝光，不得出现人物边缘发亮、背景单独虚化或抠图合成感；"
+        "皮肤保留毛孔、绒毛和局部血色，材质保留微小色差，锐度与曝光不完全均匀；"
+        "禁止蜡像磨皮、生成式过锐、过度干净的AI质感和广告写真光"
+    )
     return "真实成像硬锁：" + "；".join(parts)
 
 
@@ -2603,6 +3273,8 @@ def build_bounded_apparel_image_prompt(
     product_subject_hint="",
 ):
     """Assemble the actual Dreamina prompt under one explicit global budget."""
+    layout_lock = build_reference_layout_execution_lock_text(reference_analysis)
+    gender_lock = build_reference_gender_execution_lock_text(reference_analysis)
     priority_prefix = build_compact_reference_render_priority_prefix_v2(reference_analysis)
     scene_prompt = strip_competing_apparel_composition_sentences(
         sanitize_apparel_render_prompt(final_prompt, reference_analysis)
@@ -2616,6 +3288,7 @@ def build_bounded_apparel_image_prompt(
         "商品图只提供服饰外观结构，不提供人物、动作、构图、场景或光色；覆盖区清除旧衣，"
         "商品图是服饰结构唯一真值，逐件保持真实领口或腰头、肩部连接点、肩带数量、袖窿袖子、开合、下摆裤脚和标识；"
         "只生成图中可连续确认的结构，不增加绕颈带、后颈系带、交叉肩带、额外内搭、开口或镂空。"
+        "商品结构优先级高于体型表现；不得为突出胸部而改变领口高度与形状、肩带锚点、胸前覆盖范围或连续面料。"
     )
     if inventory_text:
         product_rule += (
@@ -2633,11 +3306,14 @@ def build_bounded_apparel_image_prompt(
             "人物最高像素不得越过该线；空间不足时缩小人物并后退镜头。"
         )
     fixed_segments = [
-        compact_prompt_text(bust_execution_rule, 90),
+        layout_lock,
+        gender_lock,
+        product_rule,
+        compact_prompt_text(build_reference_body_shape_execution_lock_text(reference_analysis), 320),
+        compact_prompt_text(bust_execution_rule, 180),
         compact_prompt_text(identity_rule, 100),
         compact_prompt_text(f"用户补充：{user_prompt}" if user_prompt else "", 80),
         build_apparel_capture_execution_rule(reference_analysis),
-        product_rule,
         artifact_rule,
     ]
     fixed_segments = [segment for segment in fixed_segments if segment]
@@ -2669,6 +3345,8 @@ def build_legacy_apparel_image_prompt(
     product_subject_hint="",
 ):
     """Restore the pre-fixed-framework Dreamina prompt assembly."""
+    layout_lock = build_reference_layout_execution_lock_text(reference_analysis)
+    gender_lock = build_reference_gender_execution_lock_text(reference_analysis)
     scene_prompt = sanitize_apparel_render_prompt(final_prompt, reference_analysis)
     priority_prefix = build_reference_render_priority_prefix(reference_analysis)
     inventory_match = re.search(r"商品清单\s*[：:]\s*([^。]+)", str(final_prompt or ""))
@@ -2679,26 +3357,67 @@ def build_legacy_apparel_image_prompt(
     )
     product_rule = (
         "商品图只提供服饰外观结构，不提供人物、动作、构图、场景或光色；覆盖区清除旧衣，"
-        "商品图是服饰结构唯一真值，严格保持领口、肩带、袖笼、开合、下摆、裤脚和标识。"
+        "商品图是服饰结构唯一真值，严格保持领口、肩带、袖笼、开合、下摆、裤脚和标识；"
+        "商品结构优先级高于体型表现，不得为突出胸部而降低或扩大领口、改成深V、移动肩带、缩窄胸前覆盖、增加露肤、事业线、开口或内衣式结构；"
+        "参考图的构图、人物外接框、四侧留白、机位和画内身体终点优先于商品完整展示：只在原图可见的身体范围内替换商品，"
+        "商品延伸到画外的部分继续留在画外，不得为展示长裙、长裤、下摆或标识而后退镜头、缩小人物、居中人物、补出腿脚或改变裁切。"
+        "若标识所在的商品区域在原图可见，必须保持标识的外观、商品内相对位置、尺寸和朝向且不被头发或配饰遮挡；"
+        "若该区域本来在画外或被动作遮挡，不得把标识移动到其他位置，也不得为了露出标识改变构图。"
     )
     if inventory_text:
         product_rule += f"商品清单：{inventory_text}。"
 
     lower_limb_rule = build_legacy_lower_limb_lock(reference_analysis)
     white_balance_rule = build_legacy_white_balance_lock(reference_analysis)
+    capture_rule = build_apparel_capture_execution_rule(reference_analysis)
+    lighting_rule = build_reference_lighting_execution_lock_text(reference_analysis)
+    face_exposure_rule = build_reference_face_exposure_lock_text(reference_analysis)
+    realism_priority_rule = (
+        "真实拍摄优先级硬锁：最终图必须首先像参考图对应设备在同一现场完成的一次真实拍摄，"
+        "保留自然皮肤纹理、局部曝光与白平衡波动、现场光衰减和不均匀清晰度；"
+        "禁止AI商业人像、棚拍精修、塑料皮肤、全画面同等锐利和背景合成感。"
+    )
 
     segments = [
+        layout_lock,
+        realism_priority_rule,
+        capture_rule,
+        lighting_rule,
+        face_exposure_rule,
+        gender_lock,
+        product_rule,
+        build_reference_body_shape_execution_lock_text(reference_analysis),
         bust_execution_rule,
         priority_prefix,
         scene_prompt,
         identity_rule,
         f"用户补充：{user_prompt}" if user_prompt else "",
-        product_rule,
         lower_limb_rule,
         white_balance_rule,
         "画面铺满画幅，无白黑边、界面、轮播点或水印。",
     ]
     return " ".join(str(segment).strip() for segment in segments if str(segment).strip())
+
+
+def build_reference_gender_execution_lock_text(reference_analysis):
+    """Keep the reference person's visible gender presentation out of product influence."""
+    appearance = reference_analysis.get("appearanceLock") if isinstance(reference_analysis, dict) else {}
+    appearance = appearance if isinstance(appearance, dict) else {}
+    gender = normalize_enum(
+        appearance.get("genderPresentation"), {"male", "female", "uncertain"}, "uncertain"
+    )
+    if gender == "male":
+        return (
+            "人物性别呈现硬锁（最高优先级）：参考图人物明确呈男性，最终图必须仍为男性人物，"
+            "保持男性面部、肩颈、胸廓和躯干呈现；不得生成女性人物、女性胸部或女性化身体轮廓。"
+            "商品图中的女模特、女款剪裁和女性身体均不提供人物属性，只提供服饰结构。"
+        )
+    if gender == "female":
+        return (
+            "人物性别呈现硬锁（最高优先级）：参考图人物明确呈女性，最终图必须仍为女性人物；"
+            "商品图中的男模特、男款剪裁和男性身体均不提供人物属性，只提供服饰结构。"
+        )
+    return ""
 
 
 def build_legacy_lower_limb_lock(reference_analysis):
@@ -2796,8 +3515,42 @@ def build_reference_render_priority_prefix(reference_analysis):
         )
         center_x = left + width / 2
         center_y = top + height / 2
-        center_label = "接近水平居中" if abs(center_x - 50) <= 7 else "偏画面左侧" if center_x < 50 else "偏画面右侧"
-        parts.append(f"人物中心固定在({center_x:.1f}%,{center_y:.1f}%)，{center_label}，不得横向漂移")
+        placement = str(frame.get("horizontalPlacement") or "").strip()
+        negative_space = str(frame.get("dominantNegativeSpace") or "").strip()
+        center_label = {
+            "left": "偏画面左侧",
+            "center": "接近水平居中",
+            "right": "偏画面右侧",
+        }.get(placement, "保持参考图横向位置")
+        placement_rule = f"人物视觉中心固定在整图({center_x:.1f}%,{center_y:.1f}%)，{center_label}，不得横向漂移"
+        if placement != "center":
+            placement_rule += "；这是有意的偏置构图，禁止把脸、胸口或人物外接框移回画面中轴线"
+            render_center_x = center_x - 4 if placement == "left" else center_x + 4
+            render_center_x = max(4, min(96, render_center_x))
+            placement_rule += (
+                f"；为抵消生图模型自动居中的倾向，渲染落点先按水平中心约{render_center_x:.1f}%执行，"
+                f"最终视觉验收回到参考图约{center_x:.1f}%"
+            )
+        negative_space_label = {"left": "左侧", "right": "右侧"}.get(negative_space)
+        if negative_space_label:
+            placement_rule += f"；画面{negative_space_label}是主要背景负空间，宽度关系不得与另一侧对调"
+        parts.append(placement_rule)
+        edge_contacts = set(normalize_text_list(frame.get("edgeContacts")))
+        if edge_contacts:
+            edge_labels = {
+                "left": "左边缘",
+                "right": "右边缘",
+                "top": "上边缘",
+                "bottom": "下边缘",
+            }
+            parts.append(
+                "人物贴边裁切硬锁：人物像素贴近"
+                + "、".join(edge_labels[item] for item in ("left", "right", "top", "bottom") if item in edge_contacts)
+                + "；保持相同贴边或自然出画，禁止为了完整展示人物而向中央挪动或扩展画幅"
+            )
+        placement_evidence = str(frame.get("horizontalPlacementEvidence") or "").strip()
+        if placement_evidence:
+            parts.append("横向位置证据：" + placement_evidence)
         is_wide_shot = (
             shot_scale_class in {"environmental", "full", "near_full", "three_quarter"}
             and (height <= 82 or top >= 15)
@@ -3092,15 +3845,108 @@ def build_reference_color_execution_lock_text(reference_analysis):
 
 def build_reference_bust_execution_lock_text(reference_analysis):
     appearance = reference_analysis.get("appearanceLock") if isinstance(reference_analysis, dict) else {}
-    level = str(appearance.get("bustLevel") or "uncertain").strip()
-    if level == "prominent":
+    appearance = appearance if isinstance(appearance, dict) else {}
+    level = normalize_enum(
+        appearance.get("bustLevel"), {"prominent", "non_prominent", "uncertain"}, "uncertain"
+    )
+    confidence = normalize_enum(
+        appearance.get("bustConfidence"), {"high", "medium", "low"}, "low"
+    )
+    evidence = normalize_text_list(appearance.get("bustEvidence"))
+    positive_markers = (
+        "左右胸部外轮廓",
+        "胸部宽度相对腰宽显著",
+        "胸部前向体积明显",
+        "独立的圆弧",
+        "独立圆弧",
+        "超出肋骨",
+        "超出躯干侧肋线",
+        "胸部外轮廓",
+        "超出腰宽",
+        "侧面弧度独立",
+        "弧度独立于衣物",
+    )
+    invalid_markers = (
+        "低领",
+        "露肤",
+        "肩带",
+        "领口",
+        "俯拍",
+        "广角",
+        "手臂挤压",
+        "裁切放大",
+        "单侧轮廓",
+    )
+    positive_count = sum(any(marker in item for marker in positive_markers) for item in evidence)
+    has_invalid_evidence = any(
+        marker in "；".join(evidence) for marker in invalid_markers
+    )
+    verified_prominent = (
+        level == "prominent"
+        and confidence == "high"
+        and len(evidence) >= 2
+        and positive_count >= 2
+        and not has_invalid_evidence
+    )
+    if verified_prominent:
         return (
-            "最高优先级体型锁：一名25至30岁的成年女性，大胸，胸部轮廓饱满突出，胸腰差明显；"
-            "不得缩小成普通或偏小胸部。商品服饰保持自身结构，不额外增加商品图不存在的低领、开口或肩带。"
+            "体型锁：参考图已由高置信度和至少两条独立身体轮廓证据确认大胸，保持参考图胸部局部体积和胸腰关系；不得缩小成普通或偏小胸部。"
+            "大胸只描述胸部局部前向体积，不代表更高体重或更大骨架；不得连带增加肩宽、躯干厚度、上臂围、腰围、胯宽、大腿围或小腿围。"
+            "但商品结构优先级高于体型：胸部只能在商品原有领口、肩带锚点、覆盖范围和连续面料内自然呈现，"
+            "不得为了突出胸部而降低或扩大领口、改成深V、拉开门襟、移动肩带、缩窄覆盖、增加露肤、事业线、开口或内衣式结构。"
         )
     if level == "non_prominent":
-        return "体型执行锁：参考图 bustLevel=non_prominent，胸部保持参考图同等的普通或偏小体积，禁止生成大胸、饱满突出胸部或夸张沙漏身材。"
-    return "体型执行锁：参考图 bustLevel=uncertain，不主动强化胸部体积，禁止凭空增加大胸或夸张胸腰差。"
+        return "体型执行锁：参考图胸部保持同等的普通或偏小自然体积，禁止放大胸部体积、增强前向突出程度或制造夸张胸腰差。"
+    return (
+        "体型执行锁：参考图没有同时满足高置信度与多条独立身体轮廓证据，"
+        "胸部只保持参考图可直接确认的自然体积，禁止凭空放大胸部、增强前向突出程度或制造夸张胸腰差。"
+    )
+
+
+def build_reference_body_shape_execution_lock_text(reference_analysis):
+    """Keep the reference skeleton and limb widths independent from bust volume."""
+    appearance = reference_analysis.get("appearanceLock") if isinstance(reference_analysis, dict) else {}
+    appearance = appearance if isinstance(appearance, dict) else {}
+    silhouette = str(appearance.get("bodySilhouette") or "").strip()
+    proportions = str(appearance.get("bodyProportions") or "").strip()
+    salience = appearance.get("visualSalience")
+    if isinstance(salience, list):
+        salience = "；".join(str(item).strip() for item in salience if str(item).strip())
+    else:
+        salience = str(salience or "").strip()
+
+    measured = []
+    if silhouette:
+        measured.append("骨架轮廓=" + silhouette)
+    if proportions:
+        measured.append("身体比例=" + proportions)
+    if salience:
+        measured.append("体型相关视觉重点=" + salience)
+    if not measured:
+        return (
+            "体型骨架硬锁：胸部体积与整体体重、骨架和四肢围度分开执行；"
+            "不得因服装版型或胸部描述擅自放大肩宽、躯干厚度、腰胯宽度和四肢围度。"
+        )
+
+    slender_markers = (
+        "纤细", "偏瘦", "修长", "窄肩", "肩宽偏窄", "躯干薄", "骨架小",
+        "四肢细", "手臂细", "大腿细", "小腿细", "腰部明显收窄",
+    )
+    measured_text = "；".join(measured)
+    slender_lock = ""
+    if any(marker in measured_text for marker in slender_markers):
+        slender_lock = (
+            "参考人物属于纤细或偏窄骨架：保持窄肩、薄躯干、细手臂、窄腰、细腿和修长比例；"
+            "禁止生成宽肩、粗手臂、厚躯干、宽腰胯、粗腿、壮实或整体丰满体型。"
+        )
+    return (
+        "体型骨架硬锁（独立于服装和胸部局部体积）："
+        + measured_text
+        + "。"
+        + slender_lock
+        + "胸部的局部体积不得改变肩宽、胸廓厚度、腰围、胯宽、手臂和腿部围度；"
+        "商品贴身或宽松也不得重塑参考人物的骨架、体重感和腿身比例。"
+    )
 
 
 def enforce_apparel_bust_level(prompt, reference_analysis):
@@ -3160,8 +4006,10 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
         model=settings["visionModel"],
         instructions=(
             "你是严格的小红书参考图取证与构图分析助手。当前只有一张参考图，只能记录画面内可直接观察到的像素，禁止推测或补全画外内容。"
+            "第一步先判断整张参考图是单张照片还是多宫格拼图。若存在两格或以上独立画格，layoutLock.layoutType 必须为 grid，逐格记录位置、裁切、人物落点和动作；不得把多个画格的人物合成一个 visiblePersonBox 或一个平均姿势。2×2四宫格必须输出 rows=2、columns=2、panelCount=4，并分别记录左上、右上、左下、右下四格。每格 pose 的左右关系必须使用该画格自己的画面左侧/画面右侧坐标。多宫格中同一人物、同一背景、同一服饰与光色的跨格一致性写入 sharedContinuity，分隔线写入 dividerDescription。"
             "先逐边检查画面：上、下、左、右边缘实际穿过什么；人物头顶、脚、腿或躯干被边缘裁掉时，必须写‘不可见’并说明边缘裁到哪里，不能给不存在的头顶留白、脚底距离或完整全身比例。"
             "visiblePersonBox 只框住画内真实可见的人体像素，不得按想象补成完整人体；坐标以整张图宽高各1000计。"
+            "必须单独检查人物的横向位置关系，不能只判断人物大小：用 visiblePersonBox 计算人物视觉中心相对画面中轴线的偏移，比较左右背景留白宽度，并检查人物是否贴住或被左、右边缘裁切。frameLock.horizontalPlacementEvidence 必须写清人物中心约在画面宽度百分之几、哪一侧是主要背景负空间，以及哪一侧人物贴边或出画；参考图不是居中构图时，禁止把人脸中心误当整个人物中心，也禁止概括成‘主体居中’。"
             "visiblePersonBox 必须作为最终渲染框而非近似参考：复核人物任意可见像素是否越过框的四边；若商品细节需要更多空间，也只能缩小人物，不得扩大外接框或推进镜头。frameLock.scalePriorityCue 要直接写明‘人物超框时缩小人物并后退镜头’，避免后续优先展示商品而改景别。"
             "必须把顶部人物留白单独复核：从画面第0行向下逐行寻找人物任意可见像素第一次出现的位置，手指、手掌、手臂、头发、头饰、头部和服饰都算人物范围；frameLock.topPersonY 记录这个最上端纵坐标，frameLock.topmostPersonPart 写明首先出现的身体部位。topPersonY 以上才是真正的顶部场景留白，不能用头顶位置代替，也不能忽略上举的手。"
             "输出 JSON 前必须交叉检查 topPersonY 与 visiblePersonBox.y：两者应基本一致；若相差超过30个千分点，重新观察顶部并修正，不得同时输出互相矛盾的留白数值。"
@@ -3170,14 +4018,15 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
             "人物有上举、平伸、叉开或出画的四肢时，visiblePersonBox 会被四肢扩大，必须以 faceBox、torsoBox 和肩部跨度共同判断真实镜头距离与人物主体大小；不能因为整体外接框接近就放大脸、肩膀或躯干。"
             "frameLock.shotScale 必须根据可见人物外接框，记录是特写、近景、半身、七分身、近全身或全身，并写出人物高度和宽度约占画面的百分比、四侧边距与可见身体终点；不能只写‘中景’。"
             "frameLock.shotScaleClass 必须严格从 close_up、medium、three_quarter、near_full、full、environmental 中选择一项；frameLock.scalePriorityCue 必须写出最能证明该景别的一个直接像素证据，例如人物外接框比例、顶部负空间、可见身体终点或人物与大面积背景的关系。environmental、full、near_full 和 three_quarter 不得因为商品需要展示而自动升级成更近景别。"
-            "personDescription 只记录不涉及身份的性别呈现、年龄段、发型轮廓和体态；appearanceLock.subjectPresence 必须记录画面中人物可见的成人年龄段、视觉成熟度、表情强度、视线关系与角色感，只能用成熟/年轻、松弛/紧张、冷静/活泼等非身份描述，不记录可识别五官。appearanceLock.mouthMicroExpression 必须独立记录嘴部当前动作状态：上下唇完全闭合、轻触、微张或明显张开，唇间缝隙是否可见，牙齿与舌头是否可见，画面左侧和画面右侧嘴角分别上扬、水平、下压或收紧，以及下颌放松或轻微绷紧；只能记录状态和方向，不描述唇形、厚度、轮廓或其他身份特征。原图闭唇时必须明确写无唇间缝隙、牙齿与舌头不可见，不能用‘自然表情’概括。appearanceLock.demographicAppearance 只记录像素能够稳定支持的大类外观呈现，例如东亚成年女性、欧美成年女性或无法确认；它不是具体身份，不得写姓名、相似对象或细粒度族裔猜测。换脸时允许生成完全不同的新五官，但不得把参考图清楚可见的大类外观呈现自动改成另一类商业模特。appearanceLock.visibleSkinTone 必须先从‘冷白皮、中性白皮、暖白皮、自然肤色、小麦色、深色肤色’中选择最接近的一档，再记录相对背景的明度和局部色偏；面部在中性或偏冷直闪下呈高明度粉白、明显缺少黄调时应判为冷白皮，不能弱化成中性米白。appearanceLock.facialSkinRendering 必须把场景白平衡与脸部基础肤色分开，记录面中、额头、下颌的基础色是否中性/偏粉/偏黄、环境暖光只影响哪些局部、眼白是否中性，以及毛孔、绒毛、血色和反光是否可见；不得把暖背景直接等同于黄色脸。"
+            "personDescription 只记录不涉及身份的性别呈现、年龄段、发型轮廓和体态；appearanceLock.genderPresentation 必须严格从 male、female、uncertain 中选择一项，只依据当前参考图人物的清晰可见性别呈现判断，不得受后续商品图的版型、商品模特或常见营销人群影响。参考图明确为男性时必须选 male，明确为女性时必须选 female，只有像素确实无法确认时才选 uncertain。appearanceLock.subjectPresence 必须记录画面中人物可见的成人年龄段、视觉成熟度、表情强度、视线关系与角色感，只能用成熟/年轻、松弛/紧张、冷静/活泼等非身份描述，不记录可识别五官。appearanceLock.mouthMicroExpression 必须独立记录嘴部当前动作状态：上下唇完全闭合、轻触、微张或明显张开，唇间缝隙是否可见，牙齿与舌头是否可见，画面左侧和画面右侧嘴角分别上扬、水平、下压或收紧，以及下颌放松或轻微绷紧；只能记录状态和方向，不描述唇形、厚度、轮廓或其他身份特征。原图闭唇时必须明确写无唇间缝隙、牙齿与舌头不可见，不能用‘自然表情’概括。appearanceLock.demographicAppearance 只记录像素能够稳定支持的大类外观呈现，例如东亚成年女性、欧美成年女性或无法确认；它不是具体身份，不得写姓名、相似对象或细粒度族裔猜测。换脸时允许生成完全不同的新五官，但不得把参考图清楚可见的大类外观呈现自动改成另一类商业模特。appearanceLock.visibleSkinTone 必须先从‘冷白皮、中性白皮、暖白皮、自然肤色、小麦色、深色肤色’中选择最接近的一档，再记录相对背景的明度和局部色偏；面部在中性或偏冷直闪下呈高明度粉白、明显缺少黄调时应判为冷白皮，不能弱化成中性米白。appearanceLock.facialSkinRendering 必须把场景白平衡与脸部基础肤色分开，记录面中、额头、下颌的基础色是否中性/偏粉/偏黄、环境暖光只影响哪些局部、眼白是否中性，以及毛孔、绒毛、血色和反光是否可见；不得把暖背景直接等同于黄色脸。"
             "appearanceLock.bodySilhouette 只记录肩宽、躯干厚度、四肢粗细和整体体型轮廓；appearanceLock.bodyProportions 必须分别记录胸部相对肩宽与腰宽的前向体积、胸腰差、腰胯宽度、可见腿长相对躯干的比例、大腿和小腿粗细。若胸部体积突出、腰部明显收窄或腿部修长，必须按可见几何关系明确写出，不得用‘身材好、性感、丰满、完美’等评价词，也不得因换装而平均化。appearanceLock.visualSalience 必须选出最影响画面辨识度的2至4项非身份视觉签名，按优先级写清；除构图尺度、体型比例、姿势轴线和角色感外，只要大型包袋、手机、家具或其他道具遮挡躯干、占画面宽高约10%以上，或同时承载双手动作，就必须作为前两项视觉签名，写明品类、相对尺寸、画面位置、遮挡与接触关系。特殊裁切、强烈侧倾和决定空间辨识度的背景结构同样不能降级成普通特征。体型字段严禁写单肩、露肩、吊带、领口、袖子、裙摆、裤装等原服饰结构；"
             "appearanceLock.bustLevel 必须严格从 prominent、non_prominent、uncertain 中选择一项；appearanceLock.bustConfidence 必须从 high、medium、low 中选择。只有去除衣物廓形和透视干扰后，胸部仍相对肩宽与腰宽明确突出、是画面主导几何特征之一，并有至少两条独立身体轮廓证据时，才允许 prominent 且 high。普通、偏小或没有明显强调时选 non_prominent；遮挡严重无法判断时选 uncertain。低领露肤、紧身或宽松衣料、褶皱下垂、俯拍近大远小、自拍广角、手臂挤压、侧身单侧轮廓和裁切放大都只能记入 bustPerspectiveRisk，不能作为 prominent 证据。"
             "appearanceLock.bustEvidence 必须列出独立的身体轮廓像素证据。prominent 至少需要两条彼此独立的证据，例如左右胸部外轮廓均明确超出肋骨线、胸部宽度相对腰宽显著扩大且不是衣物廓形；俯拍近大远小、露肤面积、低领、紧身衣、侧身单侧轮廓、裁切或手臂挤压都不能计入证据。证据不足两条时必须改为 non_prominent 或 uncertain。"
             "poseDescription 必须详细记录自拍关系、躯干前后倾与左右侧倾、躯干旋转、肩线斜率、髋肩扭转、头部方向，并分别记录画面左右两条手臂的上臂方向、肘部弯曲、前臂方向、手部可见性和是否伸出画外。所有左右关系只允许使用最终画面的画面坐标，写成‘画面左侧手臂、画面右侧手臂、画面左侧腿、画面右侧腿’，禁止出现‘左手、右手、左腿、右腿’或括号补充人物解剖左右，避免同一句中两套左右互相冲突。头部侧倾写成‘头顶朝画面左/右偏移’。appearanceLock.directionAnchors 必须提取2至6条不可互换的画面方向锚点，优先选择闭合眼与睁眼、持包手、支撑手、持手机手、近侧肩髋、明显道具、肢体交叉前后等非对称特征；每条都先写画面左侧或画面右侧，最终图任何一条都不得左右交换。appearanceLock.bodyOrientation 必须用正面、三分之二侧身或近侧面加躯干偏转角度、画面哪一侧肩髋更靠近镜头、远侧肩髋被遮挡程度、鼻尖朝向、脸部可见比例和脸部朝向；三分之二侧身或近侧面必须明确写禁止正面化。appearanceLock.actionKeyframe 用一至两句写出最能决定动作的关节和接触关系；appearanceLock.forbiddenPoseFallback 必须根据当前图像写出一个最容易把原动作破坏成默认姿势的具体错误回退，例如把横向并排伸出的双腿改成一腿抬向镜头、把单手自拍改成双手、把侧身改成正面或把支撑手改为悬空，必须同时写清禁止后的正确落点，不得写空泛的‘保持原动作’。actionKeyframe、forbiddenPoseFallback、directionAnchors、poseContacts、postureAndSupport 与 poseSurfaceGeometry 必须逐条交叉校验，同一只画面侧手、同一条画面侧腿的动作、承重点、落点和可见性不得冲突。手与包带或肩部接触时，必须区分肩前、肩顶和颈后：只有手腕与手指确实越过颈部轮廓并位于头颈后方才允许写‘肩后’或‘颈后’；若手指、指节或包带接触点在锁骨、肩峰或肩顶正面可见，必须写肩前可见接触，禁止误写成手伸到颈后。appearanceLock.captureType 必须从 selfie_visible_phone、selfie_phone_out_of_frame、third_party、timer_or_remote、uncertain 中选择，appearanceLock.phoneVisible 必须按像素证据输出布尔值。只有手机可见，或一条手臂明确向镜头延伸且对应手部在画外、透视符合持机时，才允许判断自拍；如果双手均可见或都已有明确动作与接触点，必须判断为他拍或定时遥控，不得再虚构隐藏持机手。appearanceLock.selfieRelation 必须与 captureType、phoneVisible、actionKeyframe 和 poseContacts 完全一致，明确画面哪一侧手持手机、手机是否入画及另一侧手动作；同一只手不得同时持机又抓头发、叉腰、支撑或接触其他物体。appearanceLock.poseContacts 只允许逐条记录手、手臂、脸、头发、腰胯、手机、桌面或场景道具之间的接触点，以及肢体交叉、遮挡和前后层级，严禁在此字段出现原衣服的肩带、领口、袖口、下摆或裤腰；每只可见手还必须写清画面侧、手腕位置、掌心或手背朝向、手指具体接触区域，以及对应手肘位于手的哪一侧和高低关系，只写‘触脸、抚发、叉腰、举手’不合格；"
             "appearanceLock.limbTopology 必须先盘点画内明确可见的手臂数量、手腕数量和手部数量，再按画面左侧/右侧为每只手建立唯一动作和唯一主接触点；必须明确哪些手臂或手在画外、被遮挡或不可见。一名普通人物只有两条手臂和两只手，不得把手指、包带、衣料或反射误认为额外手。limbTopology、actionKeyframe、poseContacts、selfieRelation 必须数量一致且一一对应；如果冲突，必须先修正再输出，禁止留给生图模型自行补全。"
+            "appearanceLock.handPositionAudit 必须逐只记录所有可见手的掌心几何中心，centerX、centerY 使用整图0至1000坐标；先定位手的像素中心，再记录该坐标处手的唯一接触动作和可见性，禁止先猜左右再反推坐标。screenSide 必须由 centerX 得出：小于500为画面左侧，大于等于500为画面右侧，并按 centerX 从小到大输出。输出前用该坐标审计 actionKeyframe、poseContacts、limbTopology 和 directionAnchors；若文字左右与坐标冲突，必须按坐标修正文字，不得保留冲突。"
             "输出前必须再次从每侧肩部沿上臂、肘、前臂、手腕一直追踪到指尖，用实际手指像素确认终点和接触物。包带经过肩部或手边不等于手正在握包带；只有手指确实环绕、夹持或压住包带才允许写持包。若手指实际接触另一侧手臂、肩部、头发或脸，必须以该可见接触点为准，禁止被邻近的包带或衣物边缘误导。"
-            "appearanceLock.nonTargetWardrobe 必须按上身、下身、鞋帽和配饰分区，客观记录画内真实可见服饰的品类、颜色、长度、廓形和可见范围。该字段只用于后续判断商品未覆盖区域的连续性；不得把这些服饰细节混入 personDescription、poseDescription 或 referenceDescription。"
+            "appearanceLock.nonTargetWardrobe 只允许记录商品未覆盖的身体区域是否存在独立覆盖，且只能从‘上身区域存在独立非目标服饰覆盖、下身区域存在独立非目标服饰覆盖、脚部区域存在独立非目标服饰覆盖、头部区域存在独立非目标配饰覆盖、身体局部存在独立非目标配饰覆盖’中选择。严禁记录参考图服饰主体的品类、颜色、材质、长度、廓形、裁片、领口、肩带、袖型、开口、图案、文字、Logo 或装饰。appearanceLock.nonTargetWearables 只记录商品主体覆盖区之外仍清楚可见的鞋、袜、靴、帽子、头饰、发饰、包袋、项链、耳饰、手链、戒指、眼镜或围巾；每件单独一项，必须写明准确品类、颜色、结构、画面位置、可见范围及与身体或地面的接触。此字段严禁写入参考图旧上衣、外套、裙装、裤装或连衣裙的任何外观。"
             "appearanceLock.postureAndSupport 必须先用明确类别记录站立、坐姿、跪姿、蹲姿或躺姿，再记录臀部、背部、手、脚、膝盖与墙面、地面、椅子、台阶、沙发等承载面的接触及承重点；坐姿不得只写成躯干动作。appearanceLock.locomotionGeometry 仅在人物行走、上楼或下楼时填写：必须写画面中的行进方向、身体轴线、领先腿和滞后腿各自从髋到膝到脚的二维方向、两脚分别接触哪一级台阶或是否悬空、重心位于哪条腿，以及动作发生在迈步前中后哪个关键帧；静止时输出空字符串。侧身下楼不能概括成站在台阶上，必须以脚掌与不同台阶的接触和身体前移方向作为硬证据。"
             "appearanceLock.poseSurfaceGeometry 必须先记录承载面本身在整图中的外接框、边缘方向和面积占比，再逐段写清臀部、背部、画面左右两条手臂、大腿、小腿、脚和支撑手相对承载面的关系：压在其上、沿其延伸、悬空、垂下、落地、伸出画外或被遮挡。必须明确人物是整体位于承载面上、仅坐靠边缘，还是有身体部位落地；床、长椅、沙发、台面等承载面的品类和人物接触拓扑不得互换。每条可见手臂必须写肩到肘、肘到手在二维画面中指向左上/左下/右上/右下或近水平/近垂直及约多少度；每条可见腿必须写髋到膝、膝到踝、踝到脚尖或画面裁切终点的二维轨迹，明确膝、踝、脚或可见终点位于髋的画面哪一侧、与水平线约多少度。两腿有交叉、重叠或贴近时，必须写交叉或重叠发生在大腿、膝、小腿或脚的哪一段、画面哪条腿遮挡在前、哪条在后、两膝与两踝的间距，以及属于身体接触还是仅二维遮挡；两腿分开时也要写清间距。脚或脚踝在画外不能省略画内可见腿段的交叠、前后层级和裁切终点。不能只写‘向前、向下、自然伸展’等缺少画面方向的三维词。同时记录身体主轴与承载面边缘的夹角。画面看不见的段落写不可见，不得推测。"
             "appearanceLock.foregroundObjectGeometry 记录任何决定构图或动作的显著物体，包括手机、手、包袋、家具和其他道具：只要物体占画面宽或高约10%以上、遮挡人物躯干、被手接触，或明显决定人物动作，即使它不靠近镜头、也不是待替换商品也必须填写。必须先写品类，再写外接框占画面宽高、中心位置、与脸部及躯干的相对尺寸、遮挡面积、每个接触点和近大远小关系；包袋还要写包体宽高分别约为脸宽、脸高或躯干宽的多少倍，禁止只写‘手持包’或大中小等模糊尺寸。手机入画时该字段必填，不能只写‘手持手机’。确实没有显著物体时才输出空字符串。手机未入画也不能直接判为他拍：若画面同时存在自拍臂长透视、高机位向下俯拍、一侧肩臂明显更靠近镜头且对应前臂或手部在画外，必须判为 selfie_phone_out_of_frame；只有两只手都真实可见或都有明确可见接触点时，才允许排除隐藏持机手。"
@@ -3202,7 +4051,7 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
             "appearanceLock.snapshotImperfections 必须从参考图中列出2至5条真正属于相机成像或被摄场景、可复制的不完美证据，例如轻微曝光漂移、白平衡偏移、有限动态范围、边缘软化、手持滚转、轻微噪点压缩、背景杂物、非对称裁切或局部运动模糊；不得虚构。轮播圆点、导航点、进度条、页码、播放控件、状态栏、应用水印、截图文字、白色画布、边框和黑白留边一律是查看器界面，不属于场景，不得写入任何字段。日常手机快照若完全没有真实成像瑕疵就继续保持自然，不得拿界面元素凑数。"
             "appearanceLock.environmentRealism 必须记录室内或外景的空间真实性。外景要具体记录远近对比衰减、空气透视、天空/地面/绿植的不规则色差、主光与环境反射、风对发丝和衣摆的真实影响、背景是广景深还是光学虚化；室内则记录墙面、木纹、镜面、家具的非均匀反光和空间光衰减。禁止写‘8K、电影级、大师杰作、高级感、专业级打光’等质量堆词。"
             "所有字段都要具体，colorDescription 不得用‘氛围感’、‘高级感’等空词代替。"
-            "除 nonTargetWardrobe 分区字段外，这一步不能在其他字段描述参考图人物原服饰的颜色、材质、图案、文字、领口、肩带、袖型、版型、裙摆、裤型或款式。"
+            "所有字段都不能描述参考图人物原服饰的品类、颜色、材质、图案、文字、Logo、领口、肩带、袖型、版型、裁片、开口、裙摆、裤型或装饰。方向锚点、动作关键帧、接触关系、体型证据和场景描述只能引用身体、五官可见状态、肢体、道具、承载面和背景几何，不得用旧服饰边缘作为空间锚点。"
             "referenceDescription 中原商品仍只能抽象成‘待替换商品区域’，仅记录该区域与肩颈、手臂、腰部、头发、手机及画面边界的接触、遮挡和裁切关系。"
             + identity_analysis_rule
             + "输出必须紧凑：每个字符串字段尽量控制在60个中文字内，每个数组最多4项，每项最多45字；不要在多个字段重复同一事实。只输出完整 JSON，不要 Markdown。"
@@ -3214,11 +4063,16 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
                 "text": (
                     "请严格输出 JSON："
                     "{\"hasFace\":boolean,\"reason\":\"人脸判断原因\","
+                    "\"layoutLock\":{\"layoutType\":\"single/grid\",\"rows\":0,\"columns\":0,\"panelCount\":0,"
+                    "\"dividerDescription\":\"分格线位置、颜色和粗细\",\"sharedContinuity\":\"跨格必须一致的人物、商品、背景和光色\","
+                    "\"panels\":[{\"position\":\"左上/右上/左下/右下或第N格\",\"crop\":\"该格景别与四边裁切\","
+                    "\"subjectPosition\":\"人物在该格的位置与占比\",\"pose\":\"该格独立动作、表情和接触关系\"}]},"
                     "\"frameLock\":{\"topEdge\":\"上边缘实际裁切\",\"bottomEdge\":\"下边缘实际裁切\","
                     "\"leftEdge\":\"左边缘实际裁切\",\"rightEdge\":\"右边缘实际裁切\","
                     "\"topPersonY\":0,\"topmostPersonPart\":\"最先出现的手指/头发/头部或其他人物部位\","
                     "\"topBlankEvidence\":\"最高人物像素与固定背景锚点共同复核出的顶部留白\","
                     "\"visiblePersonBox\":{\"x\":0,\"y\":0,\"width\":0,\"height\":0},"
+                    "\"horizontalPlacementEvidence\":\"人物视觉中心、左右留白差、主要背景负空间及左右贴边裁切证据\","
                     "\"scaleAnchors\":{\"faceBox\":{\"x\":0,\"y\":0,\"width\":0,\"height\":0},"
                     "\"torsoBox\":{\"x\":0,\"y\":0,\"width\":0,\"height\":0},"
                     "\"leftShoulderX\":0,\"rightShoulderX\":0,\"headTopY\":0,\"chinY\":0,"
@@ -3240,7 +4094,7 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
                     "\"focalConfidence\":\"high/medium/low\",\"lensEvidence\":\"近大远小边缘拉伸与空间压缩证据\","
                     "\"distanceAndLens\":\"拍摄距离与镜头透视\","
                     "\"perspectiveEvidence\":\"支持机位判断的画内透视证据\",\"forbiddenFallback\":\"禁止回退的默认机位\"},"
-                    "\"appearanceLock\":{\"visibleSkinTone\":\"可见皮肤明度与冷暖\","
+                    "\"appearanceLock\":{\"genderPresentation\":\"male/female/uncertain\",\"visibleSkinTone\":\"可见皮肤明度与冷暖\","
                     "\"facialSkinRendering\":\"面部基础肤色、环境色影响范围、眼白、毛孔血色与反光\","
                     "\"bodySilhouette\":\"肩宽、躯干厚度、四肢粗细和整体体型\","
                     "\"bodyProportions\":\"胸部前向体积、胸腰比、腰胯宽度、腿身比与腿部粗细\","
@@ -3254,6 +4108,7 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
                     "\"postureAndSupport\":\"姿态类别、承载面、臀背手脚膝的接触与承重点\","
                     "\"bodyOrientation\":\"正面/三分之二侧身/近侧面、躯干偏转角、鼻尖朝向、脸部可见比例、近远侧肩髋及遮挡程度\","
                     "\"directionAudit\":{\"faceCenterX\":0,\"noseTipX\":0,\"evidence\":\"双眼中点或脸框中心与鼻尖的画面坐标证据\"},"
+                    "\"handPositionAudit\":[{\"screenSide\":\"left/right\",\"centerX\":0,\"centerY\":0,\"contact\":\"该坐标处手的唯一接触动作\",\"visibility\":\"完整/局部/遮挡\",\"evidence\":\"手腕掌心与接触物的像素证据\"}],"
                     "\"actionKeyframe\":\"决定动作的一至两句关节与接触关系\","
                     "\"limbTopology\":\"可见手臂/手腕/手数量，每只手唯一动作与主接触点，画外或遮挡状态\","
                     "\"forbiddenPoseFallback\":\"最可能发生的错误姿势回退及其正确落点\","
@@ -3262,7 +4117,8 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
                     "\"phoneVisible\":boolean,"
                     "\"selfieRelation\":\"单手/双手/他拍、持手机手、手机是否入画、另一只手动作\","
                     "\"foregroundObjectGeometry\":\"近镜头或显著道具的外接框、中心、相对人物尺度、遮挡、逐手接触点和透视关系，无则为空\","
-                    "\"nonTargetWardrobe\":[\"上身/下身/鞋帽/配饰分区可见服饰\"],"
+                    "\"nonTargetWardrobe\":[\"仅输出固定的身体区域独立覆盖关系，不含任何服饰外观\"],"
+                    "\"nonTargetWearables\":[\"商品覆盖区外可见的鞋袜或配饰：准确品类、颜色、结构、位置、可见范围与接触\"],"
                     "\"poseSurfaceGeometry\":\"身体各段相对承载面的压靠、悬空、垂下、落地、遮挡及主轴夹角\","
                     "\"locomotionGeometry\":\"行走或上下台阶的方向、领先腿/滞后腿、脚掌台阶接触、重心和动作相位，静止为空\","
                     "\"headPoseRange\":\"头部俯仰转动侧倾角度范围及仍可见五官\","
@@ -3304,6 +4160,8 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
     if not isinstance(data.get("hasFace"), bool):
         lowered = text.lower()
         has_face = '"hasface": true' in lowered or '"hasface":true' in lowered
+    fallback_layout_text = json.dumps(data, ensure_ascii=False)
+    layout_lock = normalize_reference_layout_lock(data.get("layoutLock"), fallback_layout_text)
     frame_lock = normalize_reference_frame_lock(data.get("frameLock"))
     appearance_lock = normalize_reference_appearance_lock(data.get("appearanceLock"))
     appearance_lock = reconcile_reference_screen_direction(appearance_lock)
@@ -3322,6 +4180,7 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
     return {
         "hasFace": has_face,
         "reason": str(data.get("reason") or "").strip(),
+        "layoutLock": layout_lock,
         "frameLock": frame_lock,
         "appearanceLock": appearance_lock,
         "cameraLock": camera_lock,
@@ -3329,7 +4188,10 @@ def analyze_apparel_reference(reference_data_url, settings, face_identity_mode="
     }
 
 
-def compose_non_apparel_prompt(reference_data_url, product_data_url, settings):
+def compose_non_apparel_prompt(reference_data_url, product_data_urls, settings):
+    if isinstance(product_data_urls, str):
+        product_data_urls = [product_data_urls]
+    product_data_urls = [item for item in product_data_urls if isinstance(item, str) and item]
     subject_hint = settings.get("productSubjectHint", "")
     user_prompt = settings.get("userPrompt", "").strip() or DEFAULTS["defaultUserPrompt"]
     text, raw_response = call_vision_model_with_debug(
@@ -3342,13 +4204,16 @@ def compose_non_apparel_prompt(reference_data_url, product_data_url, settings):
         ),
         content=[
             {"type": "input_image", "image_url": reference_data_url},
-            {"type": "input_image", "image_url": product_data_url},
+            *[
+                {"type": "input_image", "image_url": product_data_url}
+                for product_data_url in product_data_urls
+            ],
             {
                 "type": "input_text",
                 "text": (
                     "第一张图是参考图，只负责提供最终生成图的场景、构图、光影、景别、主体占比和整体视觉气质。"
-                    "第二张图是商品图，只负责提供最终要生成出来的非服饰商品主体，并且会直接作为生图模型的商品参考图。"
-                    "第二张商品图如果包含模特、人脸、手臂、身体、姿势或拍摄背景，这些全部是干扰，不得影响最终图的人物可见范围、动作、四边裁切、机位和场景。"
+                    "第二张以及其后的图都是用户上传的商品素材图，共同提供最终要生成出来的非服饰商品主体，并且都会直接作为生图模型的商品参考图。"
+                    "这些商品素材图如果包含模特、人脸、手臂、身体、姿势或拍摄背景，这些全部是干扰，不得影响最终图的人物可见范围、动作、四边裁切、机位和场景。"
                     "你的输出必须是最终成图的中文描述，不要说“参考图里”“商品图里”，而要直接描述最终图片本身。"
                     "最终图片必须是：用户商品在视觉上成为新的主体，但整个画面的场景、机位、镜头、背景、时间段、光影关系、陈列方式、主体大小、主体落点、主体朝向、主体倾斜角度、主体与承载面的接触方式、前后层级和遮挡关系都尽量接近参考图。"
                     "如果参考图中有人物，必须用具体方位描述躯干侧倾和旋转、肩线斜率、髋肩扭转，以及每条手臂的上臂方向、肘部弯曲、前臂方向、手部可见性和出画关系；不得把非对称自拍动作改成正面站立或对称展示姿势。"
@@ -3376,13 +4241,17 @@ def compose_non_apparel_prompt(reference_data_url, product_data_url, settings):
 
 
 def compose_apparel_final_prompt(
-    product_data_url,
+    product_data_urls,
     reference_analysis,
     settings,
     face_identity_mode="regenerate",
 ):
+    if isinstance(product_data_urls, str):
+        product_data_urls = [product_data_urls]
+    product_data_urls = [item for item in product_data_urls if isinstance(item, str) and item]
     reference_has_face = bool(reference_analysis.get("hasFace"))
     reference_description = str(reference_analysis.get("referenceDescription") or "").strip()
+    reference_layout_execution = build_reference_layout_execution_lock_text(reference_analysis)
     reference_frame_lock = build_reference_frame_lock_text(reference_analysis)
     reference_camera_lock = build_reference_camera_lock_text(reference_analysis)
     reference_appearance_lock = build_reference_appearance_lock_text(reference_analysis)
@@ -3391,26 +4260,39 @@ def compose_apparel_final_prompt(
     reference_bust_execution = build_reference_bust_execution_lock_text(reference_analysis)
     subject_hint = settings.get("productSubjectHint", "")
     user_prompt = settings.get("userPrompt", "").strip() or DEFAULTS["defaultUserPrompt"]
+    multi_product_rule = ""
+    if len(product_data_urls) > 1:
+        multi_product_rule = (
+            f"本次共有{len(product_data_urls)}张由用户分别导入的商品素材图；默认每张独立素材都是用户有意选择的目标商品，"
+            "必须逐张识别、逐件写入最终画面，并按各自对应的身体区域组合穿着。"
+            "不得套用单图场景下‘只选择最居中的一件’规则，也不得漏掉其中任一张素材对应的商品。"
+        )
     content = [
-        {"type": "input_image", "image_url": product_data_url},
+        *[
+            {"type": "input_image", "image_url": product_data_url}
+            for product_data_url in product_data_urls
+        ],
         {
             "type": "input_text",
             "text": (
-                "当前唯一输入图是用户上传的商品图。小红书参考图不在本次图像输入中，它已被上一步转换为下方的场景与构图描述。"
-                "你必须先锁定商品图中真正要替换的商品主体；商品主体既可能是单件，也可能是明确成套出现的多件组合，必须按实际件数逐件写进最终画面。"
+                "当前输入图均为用户上传的商品素材图，多张图共同提供商品结构与外观；小红书参考图不在本次图像输入中，它已被上一步转换为下方的场景与构图描述。"
+                + multi_product_rule
+                + reference_layout_execution
+                + "你必须先锁定商品图中真正要替换的商品主体；商品主体既可能是单件，也可能是明确成套出现的多件组合，必须按实际件数逐件写进最终画面。"
                 "写最终 prompt 前先在内部完成逐件商品结构白名单：按品类与件数、领口或腰头、肩部连接点与肩带数量、袖窿与袖子、开合与开孔、下摆或裤脚、拼接和标识逐槽核对。只有在商品图中能沿轮廓连续确认的结构才可写入；无法确认就留空，不得根据常见款式补全。"
                 "尤其不得把商品图留白、文字、人体皮肤边缘、另一件单品的轮廓或模糊细线误认成绕颈带、后颈系带、蝴蝶结、交叉肩带、额外内搭或镂空。"
                 "最终 prompt 必须明确写出该商品的品类、主色、廓形、结构、面料、图案、领口、肩带、袖长、腰线、下摆、裤脚或其他最有辨识度的可见特征；"
                 "不能用‘以商品图为准’替代商品外观描述，也不能回退到参考图人物原本穿着的商品。"
-                "商品图中可见的品牌标签、logo、文字贴标、刺绣章或独立徽标属于商品结构锚点，不是可省略装饰：最终 prompt 必须写明其外观、所在身体区域、相对领口/门襟/中轴的位置和可见范围。它在最终图中必须完整可见且位置稳定；项链、头发、包带或其他非商品配饰与它冲突时，优先保证商品标签不被遮挡，并让配饰错开或删除，绝不能移动、覆盖或省略商品标签。"
-                "商品图中的模特、脸、发型、姿势、手势、身体比例、背景、道具和搭配品都是干扰，只提取被锁定的商品本身。"
+                "商品图中可见的品牌标签、logo、文字贴标、刺绣章或独立徽标属于商品结构锚点，不是可省略装饰：最终 prompt 必须写明其外观、所在身体区域、相对领口/门襟/中轴的位置和可见范围。若该商品区域在参考构图中入镜，标识必须保持商品内相对位置、尺寸和朝向并清楚可见；项链、头发、包带或其他非商品配饰与它冲突时，让配饰错开或删除。若标识所在区域本来在画外或被动作遮挡，则维持原裁切或遮挡，禁止把标识移动到其他位置，也禁止为展示标识拉远镜头、缩小或居中人物。"
+                "商品图中的模特、脸、发型、性别、姿势、手势、身体比例、背景、道具和搭配品都是干扰，只提取被锁定的商品本身。"
+                "appearanceLock.genderPresentation 是不可覆盖的人物硬锁：male 时最终画面必须明确为男性人物并禁止女性身体呈现，female 时最终画面必须明确为女性人物；商品图的模特性别和商品营销人群不得改变该字段。"
                 "商品图的白平衡、环境光、肤色、曝光、对比、饱和度、背景色和滤镜同样是干扰，最终画面全局调色只能来自下方参考场景的 colorDescription 和光色硬锁。"
                 "商品图中人物的头部和人脸完整度也是干扰；如果参考图上边缘裁掉头部或脸部，最终 prompt 不得补出完整脸部。"
                 "构图优先级高于商品完整度：商品图即使展示全身或完整商品，也不得拉远镜头、缩小人物、补出腿脚、鞋子、地面或画外商品部位。"
                 "默认换脸只替换身份特征，不能改变参考描述中的可见肤色、肩宽、胸部前向体积、胸腰比、腰胯宽度、腿身比、躯干厚度、四肢粗细、成人年龄段、视觉成熟度和整体角色感；不得把人物自动标准化为纤瘦、平胸、短腿、白皙、幼态或甜妹式商业模特。"
                 "默认换脸还必须保留 demographicAppearance 中像素可确认的大类外观呈现；只生成不同五官和不同身份，不得把清楚可见的东亚成年女性自动改成欧美面孔，或反向改成另一类人群。若该字段无法确认，不得自行猜测。"
-                "最终 prompt 的开头顺序固定为：第一句构图与人物占比，第二句机位硬锁；若人物接触床、长椅、沙发、台面或其他承载面，第三句立即写承载面外接范围及人物整体/局部位于其上的接触拓扑；若 foregroundObjectGeometry 非空，下一句立即写显著物件相对脸部和躯干的尺寸、整图外接框、中心、遮挡和逐手接触；随后写背景结构锚点，再写身体朝向与动作关键帧。动作关键帧必须保留结构化分析中的画面侧、手腕位置、掌心或手背朝向、手指接触区域和手肘高低，不能压缩成泛化动作词。只有 appearanceLock.bustLevel=prominent、bustConfidence=high 且 bustEvidence 至少有两条独立轮廓证据时，动作句之后的第一句开头才必须原样写‘一名25至30岁的成年女性拥有明显丰满的大胸，胸部轮廓饱满突出，胸腰差明显’，不要解释衣料受力，不要改写成胸部前向体积等分析语言，也不得用纤细、偏薄或标准身材弱化它；置信度不足或 bustLevel=non_prominent/uncertain 时禁止写大胸、丰满突出或夸张胸腰差。"
-                "若参考描述明确可见事业线，且商品领口结构允许，继续直接写‘可见与参考图相同程度的事业线’；如果商品结构不允许，只保留大胸描述，不虚构领口、开口或吊带。"
+                "若存在拼图版式硬锁，最终 prompt 必须先完整写拼图布局和逐格执行要求，再写每一格自己的构图与机位；否则最终 prompt 的开头顺序固定为：第一句构图与人物占比，第二句机位硬锁。若人物接触床、长椅、沙发、台面或其他承载面，下一句立即写承载面外接范围及人物整体/局部位于其上的接触拓扑；若 foregroundObjectGeometry 非空，再写显著物件相对脸部和躯干的尺寸、整图外接框、中心、遮挡和逐手接触；随后写背景结构锚点，再写身体朝向与动作关键帧。动作关键帧必须保留结构化分析中的画面侧、手腕位置、掌心或手背朝向、手指接触区域和手肘高低，不能压缩成泛化动作词。只有 appearanceLock.bustLevel=prominent、bustConfidence=high 且 bustEvidence 至少有两条独立轮廓证据时，动作句之后的第一句开头才必须原样写‘一名25至30岁的成年女性拥有明显丰满的大胸，胸部轮廓饱满突出，胸腰差明显’，不要解释衣料受力，不要改写成胸部前向体积等分析语言，也不得用纤细、偏薄或标准身材弱化它；置信度不足或 bustLevel=non_prominent/uncertain 时禁止写大胸、丰满突出或夸张胸腰差。"
+                "商品结构句必须写在体型句之前。若参考描述明确可见事业线，且商品自身清楚具有足以自然露出该区域的低领或开放领口，才可写‘可见与商品领口自然允许范围一致的事业线’，且露肤范围不得超过商品图；如果商品结构不允许，只保留体型，不写事业线，不降低领口，不虚构开口、吊带或内衣式结构。"
             "必须把场景白平衡与面部基础肤色分别写清楚：先按画面面积最大的背景区域确定综合色，再用白墙、灰墙或眼白校验白平衡；非直闪时，暖墙、夕阳、木色或绿植反光只能局部影响受光面、边缘光和阴影，不能让整张脸统一发黄发橙；除非参考分析明确如此，面中和眼白应保持自然中性并带轻微血色。若综合色偏只为轻微，写整体近中性和局部冷暖，禁止写全局暖黄滤镜。"
             "appearanceLock.backgroundStructureAnchors 必须列出2至5个不可替换的背景结构锚点，优先选择占画面面积较大、决定空间辨识度的镜子及镜框、床、长椅、沙发、门窗、柱子、栏杆、墙面分缝、台阶、固定家具和明显景深层级；每条都写明画面位置、约占宽高、相邻关系、遮挡与前后层级。大型镜子无论是否用于自拍，都必须记录镜框、镜面边界、支架及反射人物或反射空间，不能只写室内墙面；大型承载面必须记录其外接范围、边缘方向和人物接触区域。appearanceLock.backgroundForbiddenFallback 必须写出本图最容易发生的背景简化错误，例如把大型镜子、床、长椅、门或柱子替换为空墙；不得写空泛的保持背景。"
                 "若是镜前自拍，最终 prompt 必须同时写出四类可验收证据：镜框至少三边可见、镜外前景与镜内反射有清楚边界、手机镜头朝镜面、人物只出现在镜面内；禁止改成第三人称他拍、透明玻璃门或普通墙面前站立。"
@@ -3422,7 +4304,8 @@ def compose_apparel_final_prompt(
             "只要 environmentColorZones 非空，最终 prompt 必须逐项写出这些大面积区域的具体颜色和空间范围，不得压缩成‘户外自然光’或‘暖色氛围’。天空必须明确顶部、云层、地平线各自颜色及渐变方向；日落或黄昏必须保留暖橙/粉橙/紫红光带的方位、面积和饱和度，并同步写出水面、建筑或人物边缘实际可见的环境色反射，禁止回退成灰白阴天或普通蓝天。"
             "appearanceLock.globalColorBiasStrength 必须从 none、subtle、moderate、strong 中选择。subtle 只允许表现为中性色上的轻微白平衡痕迹，大面积白灰仍应接近中性，绝不能放大成覆盖整图的绿、黄、红或蓝滤镜；moderate 或 strong 才允许综合色明显主导画面。"
                 "必须沿用 toneProfile 的黑位、阴影细节、中间调、高光滚降和总体对比度；低对比参考图不得生成深黑硬阴影、过曝白皮或商业人像高反差。"
-                "动作必须落实到每条手臂的关节方向、接触点和前后层级。最终 prompt 只允许使用‘画面左侧/画面右侧’作为执行坐标，禁止再写人物解剖左手、右手、左腿、右腿或括号校验，避免两套左右冲突。第三句动作关键帧之后必须立即写‘禁止整幅水平翻转’，再逐条原样写入 directionAnchors；侧身朝向、近侧肩髋、头部侧倾、睁闭眼、持手机手、持包手、支撑手、交叉前后和道具位置均不得左右互换。眼睛必须写‘画面左侧眼/画面右侧眼’，不能只写左眼或右眼。手是否贴脸、扶头、叉腰、支撑、交叉或伸出画外都不能省略。"
+                "动作必须落实到每条手臂的关节方向、接触点和前后层级。最终 prompt 只允许使用‘画面左侧/画面右侧’作为执行坐标，禁止再写人物解剖左手、右手、左腿、右腿或括号校验，避免两套左右冲突。第三句动作关键帧之后必须立即写‘禁止整幅水平翻转’，再逐条写入经过净化的 directionAnchors；这些锚点只能描述身体、眼睛可见状态、肢体、道具、承载面和背景几何，禁止出现参考图旧服饰的边缘、领口、肩带、袖口、裁片、开口、下摆、颜色或装饰。侧身朝向、近侧肩髋、头部侧倾、睁闭眼、持手机手、持包手、支撑手、交叉前后和道具位置均不得左右互换。眼睛必须写‘画面左侧眼/画面右侧眼’，不能只写左眼或右眼。手是否贴脸、扶头、叉腰、支撑、交叉或伸出画外都不能省略。"
+                "handPositionAudit 是手部方向的最高优先级证据。最终 prompt 必须逐只写清手的画面侧、0至1000中心坐标和该坐标处的唯一接触动作；centerX小于500只能是画面左侧，centerX大于等于500只能是画面右侧。若 actionKeyframe、poseContacts、limbTopology 或 directionAnchors 的文字左右与坐标冲突，必须先按坐标修正后再输出，禁止交换两只手、整图镜像或把托腮手与落膝手互换。"
                 "如果 bodyOrientation 是三分之二侧身或近侧面，第三句必须同时写出鼻尖朝向、脸部可见比例、近侧肩髋、远侧肩髋遮挡和胸腹侧轮廓，并原样加入‘保持三分之二侧身/近侧面，禁止转成正面’；后文禁止出现正面展示、正对镜头、双肩平行于画面等冲突词。"
                 "当 bodyOrientation 写近侧面或躯干偏转达到45度以上时，统一按近侧面执行：胸腹正面可见宽度必须明显压缩，远侧肩髋被近侧身体遮挡，不能降级成轻微三分之二侧身，更不能转成正面。"
                 "生成最终 prompt 前必须做手部占用校验：逐只列出画面左侧手和画面右侧手当前唯一动作；同一只手不得同时持手机又抓头发、叉腰、支撑或接触道具。若双手都可见或都已有明确动作，拍摄方式只能写他拍或定时遥控，禁止推断隐藏持机手。"
@@ -3443,13 +4326,13 @@ def compose_apparel_final_prompt(
                 "最终 prompt 第二句必须完整采用机位硬锁，至少同时写相机相对人物高度、向下俯拍或向上仰拍的方向与角度、镜头水平偏左或偏右、画面顺逆时针滚转，以及自拍臂长或他拍距离。即使某项接近0度也要明确写出，禁止只写‘手机随拍、正面视角、自然角度’。机位句与构图句同级，后文不得用平视、端正、正面展示等词覆盖它。"
                 "构图硬锁提供 topPersonY 时，最终 prompt 第一句必须先写‘画面顶部连续保留约X%场景留白，任何手指、手臂、头发、头部或服饰都不得进入’，再描述人物占比；这里的X只能来自 topPersonY，不能改用头顶位置，也不能被上举手臂覆盖。"
                 "构图硬锁含局部尺度锚点时，内部必须用面部、肩部和躯干尺度共同判断镜头距离，但最终 prompt 只写一句简洁且无冲突的整体占比。没有明显伸展四肢时，写‘人物整体高度约占画面X%，顶部保留Y%场景空间’；有上举、平伸、叉开或出画的四肢时，必须把所有可见四肢包含在人物整体内，写‘人物连同伸展四肢在内整体高度约占画面X%，人物最高点位于画面高度Y%，上方Y%只有背景’，并按需补充脸宽或肩宽一个最关键尺度。写出顶部留白后，后文不得再说手指、手臂、头发或头部进入这段顶部区域，也不得把同一部位同时写成完整可见和伸出画外。"
-                "如果参考图中的手原本插在旧服饰口袋里，而新商品没有对应口袋，只保留手臂弯曲方向和手在身体侧面的空间位置，改成自然贴靠、被身体遮挡或放入必要的中性下装口袋；绝不能给新商品虚构口袋。"
-                "必须先从商品主体说明和商品图共同列出本次商品包含的全部单品及各自覆盖区域，再读取 nonTargetWardrobe。单件商品只替换重叠区域；但商品说明明确为套装或同时列出上装与下装时，上下身都是商品覆盖区，必须一起清空旧服饰并逐件换成商品图对应单品，严禁残留参考图原裤子、原裙子、原腰线或旧上装。只有商品未覆盖区域才进入搭配兼容判断。"
+                "如果参动作中的手依赖即将被替换区域上的口袋接触，而新商品没有对应口袋，只保留手臂弯曲方向和手在身体侧面的空间位置，改成自然贴靠、被身体遮挡或放入必要的中性搭配口袋；绝不能给新商品虚构口袋。"
+                "必须先从商品主体说明和商品图共同列出本次商品包含的全部单品及各自覆盖区域，再读取 nonTargetWardrobe；该字段只表示未覆盖区域是否存在独立服饰，不含任何参考图旧服饰外观。单件商品只替换重叠区域；商品说明明确为套装或同时列出多件时，所有对应身体区域都是商品覆盖区，必须清空该区域旧结构并逐件换成商品图对应单品。只有商品未覆盖区域才进入搭配兼容判断。"
                 "最终 prompt 的末句必须写成‘商品清单：共N件，1.品类与关键结构；若有更多单品则按序继续列出。’，N与商品图和商品主体说明一致；单件商品只列一项，多件组合中的上装、下装、外套或其他单品都要单列，不得把多件合并成泛称穿搭，也不得遗漏任一单品。"
-                "替换区域必须按身体区域清空旧结构：若商品是上装，原图上身区域中的旧上衣、旧内搭、背心、吊带、胸衣肩带、旧领口与旧袖片全部随旧商品删除，不得以叠穿或露出肩带的方式保留；nonTargetWardrobe 只保留商品不覆盖区域的下装、鞋帽和必要配饰。"
-                "对商品覆盖区域外的鞋袜、帽子、包袋、首饰逐项判断与新商品的长度、廓形和风格是否兼容：兼容且仍可见时保留；新长裤或长裙遮住脚踝时删除旧袜口；明显冲突时删除，或换成无品牌、低存在感的简单协调款。此调整只能改变搭配外观，不能改变人物动作、手与道具接触点、脚部落点、裁切和构图。"
+                "替换区域必须按身体区域完整清空参考图旧结构，不得叠加、透出或复原任何旧服饰边缘。nonTargetWardrobe 只能决定未覆盖区域是否需要一件中性、低存在感的连续搭配；最终 prompt 严禁描述或恢复参考图旧服饰的品类、颜色、材质、版型、图案、开口、文字、Logo 或装饰。"
+                "先读取 nonTargetWearables，再对商品覆盖区域外的鞋袜、帽子、包袋和首饰逐项判断。与新商品物理兼容且在参考图中可见时，必须保留该字段记录的准确品类、颜色、结构、位置、可见范围和接触，不得擅自改成赤脚、无袜或中性替代款；只有新商品实际遮住该物件，或商品结构与其发生明确物理冲突时才允许删除或简化，并要在 prompt 中点明遮挡或冲突原因。此规则只适用于商品主体覆盖区外的鞋袜和配饰，绝不能恢复参考图旧上衣、裙装、裤装或连衣裙外观，也不能改变人物动作、手与道具接触点、脚部落点、裁切和构图。"
                 "如果商品图显示的是覆盖脚踝或接近鞋面的全长长裤，最终 prompt 必须明确裤脚保持商品原长自然垂落，删除参考图袜子；不得卷裤脚、缩短裤长、做束口或堆叠裤脚来露出袜子。"
-                "如果当前商品是独立上衣，必须保持清楚的上衣下摆与下装分界，不得延伸成连衣裙或连体衣；但参考图原本就可见的独立裤装或裙装属于非目标区域，必须继续保留。"
+                "如果当前商品是独立上衣，必须保持清楚的上下身分界，不得延伸成连身单品；未覆盖的下身区域如需补全，只生成无品牌、低存在感且不改变动作、裁切和构图的中性搭配，不得根据参考图恢复其具体品类或外观。"
                 "真实感必须写成与参考图一致的物理成像：镜头透视、景深和边缘软硬、自动曝光或白平衡波动、噪点或压缩、轻微运动模糊、高光滚降或溢出、阴影细节、皮肤毛孔、绒毛、局部血色与自然反光；皮肤保持自然半哑光，只在真实受光位置出现有限高光，禁止整脸油亮发黄、蜡像磨皮、过度对称或生成式过锐；禁止用‘高清真实’一句带过，也禁止把人物写成完美商业模特或影棚成片。"
                 "如果拍摄模式是日常手机快照，最终 prompt 原样写入‘普通 iPhone 原相机实拍的日常生活快照，画面随性，非摆拍、非精心构图或打光’。只有 captureMode 明确为早期老旧CCD生活抓拍且 ccdEvidence 至少两条时，才原样写入‘早期老旧 CCD 或消费级数码相机的生活抓拍质感’，并只补充证据中实际存在的有限动态范围、高光截断、暗部彩色噪点、低像素压缩、偏硬数码锐化、自动白平衡偏移或直闪衰减；禁止泛用 CCD、复古滤镜或胶片颗粒。如果是暗环境直闪，同时使用分析提供的 iPhone 随手拍直闪语义。禁止加入高清人像、8K、4K、超高清、极致细节、大师杰作、电影级、高级感、完美脸、完美身材或专业级打光。"
                 "日常手机快照还必须从 snapshotImperfections 中保留至少两条真实可见的不完美证据；不得把人物改成标准模特展示姿势，不得整理掉背景生活痕迹，不得统一锐化、磨皮、虚化背景或改成商业写真光。"
@@ -3466,7 +4349,7 @@ def compose_apparel_final_prompt(
                 + f"已去除原商品外观的场景与构图描述：{reference_description}"
                 + build_subject_hint_text(subject_hint)
                 + f"用户补充要求：{user_prompt}"
-                + "输出前自检：构图与人物位置、机位与透视、动作与肢体拓扑、人物状态与表情、嘴部微表情、环境位置与细节、光源方向与颜色、人物受光区域、曝光与全局色彩、真实成像质感、商品替换结构是否都有可执行描述；嘴唇开合、唇间缝隙、露齿露舌、画面左右嘴角方向和下颌受力是否与 mouthMicroExpression 一致；limbTopology 与动作接触是否一一对应且不会产生额外肢体；商品清单点名的每件套装单品是否都已写入且对应覆盖区没有残留旧衣；全长长裤是否保持原长且没有为旧袜子卷短裤脚；单手自拍是否仍只有一只手持手机；近镜头手机是否保持相对人物的放大与遮挡；三分之二侧身或近侧面是否被正面化；人物是否越过外接框或侵占顶部背景；CCD 是否有至少两条像素证据才启用；不得把完整肩线或袖子改成露肩、吊带或额外内搭；neutralAnchorAudit 是否与综合色一致；天空、水面、地面和建筑等 environmentColorZones 是否逐区保留具体颜色、渐变和反射，黄昏是否仍是同一时间段而未回退成蓝天或阴天；顶部、侧面或背后的局部主光是否以正确颜色真实落在头发、脸、肩颈和服饰对应区域；生活快照是否只保留真实相机或场景不完美而未复制任何轮播圆点、进度条、水印、白边或截图界面；构图、机位、景别、顶部负空间、身体朝向、动作接触、体型置信度、背景主色、皮肤基础色和对比曲线是否均与结构化硬锁一致。"
+                + "输出前自检：构图与人物位置、机位与透视、动作与肢体拓扑、人物状态与表情、嘴部微表情、环境位置与细节、光源方向与颜色、人物受光区域、曝光与全局色彩、真实成像质感、商品替换结构是否都有可执行描述；嘴唇开合、唇间缝隙、露齿露舌、画面左右嘴角方向和下颌受力是否与 mouthMicroExpression 一致；handPositionAudit 的每只手是否按centerX落在正确画面侧且接触动作未互换；limbTopology 与动作接触是否一一对应且不会产生额外肢体；参考图可见脚部且 nonTargetWearables 含鞋袜时是否保留准确鞋袜外观而没有变成赤脚；商品清单点名的每件套装单品是否都已写入且对应覆盖区没有残留旧衣；体型是否只在商品原有连续面料内自然呈现，是否错误地为了突出胸部降低或扩大领口、改成深V、移动肩带、缩窄胸前覆盖、增加露肤、事业线、开口或内衣式结构；全长长裤是否保持原长且没有为旧袜子卷短裤脚；单手自拍是否仍只有一只手持手机；近镜头手机是否保持相对人物的放大与遮挡；三分之二侧身或近侧面是否被正面化；人物是否越过外接框或侵占顶部背景；CCD 是否有至少两条像素证据才启用；不得把完整肩线或袖子改成露肩、吊带或额外内搭；neutralAnchorAudit 是否与综合色一致；天空、水面、地面和建筑等 environmentColorZones 是否逐区保留具体颜色、渐变和反射，黄昏是否仍是同一时间段而未回退成蓝天或阴天；顶部、侧面或背后的局部主光是否以正确颜色真实落在头发、脸、肩颈和服饰对应区域；生活快照是否只保留真实相机或场景不完美而未复制任何轮播圆点、进度条、水印、白边或截图界面；构图、机位、景别、顶部负空间、身体朝向、动作接触、体型置信度、背景主色、皮肤基础色和对比曲线是否均与结构化硬锁一致。"
                 + "最终 Prompt 控制在700至900个中文字符。每项约束只写一次，不重复构图硬锁、外观硬锁或同义禁止项；必须用紧凑句式完整覆盖构图、机位、动作、商品结构、场景光色和真实成像，删除低价值背景枚举与通用禁止项。长度略有偏差时也不要补写重复内容。"
                 + "只输出 FINAL_PROMPT: 后面接一整段最终画面描述，不要输出分析、清单、Markdown 或 JSON。"
             ),
@@ -3476,6 +4359,7 @@ def compose_apparel_final_prompt(
         f"{settings['apparelFinalPrompt']}{APPAREL_PROMPT_GUARDRAILS}{PRODUCT_STRUCTURE_GUARDRAILS}"
         f"{SCENE_REPLICATION_GUARDRAILS}"
         f"{build_face_identity_prompt_rule(face_identity_mode, reference_has_face)}"
+        f"{reference_layout_execution}"
         f"{reference_frame_lock}"
         f"{reference_camera_lock}"
         f"{reference_appearance_lock}"
@@ -3703,10 +4587,12 @@ def resolve_dreamina_ratio(image_size):
 def resolve_dreamina_resolution(settings):
     extra_body = settings.get("extraBody") if isinstance(settings.get("extraBody"), dict) else {}
     value = str(extra_body.get("dreaminaResolutionType") or "").strip().lower()
-    if value in ("1k", "2k", "4k"):
+    if value in ("1.5k", "2k", "4k"):
         return value
+    if value == "1k":
+        return "1.5k"
     if resolve_dreamina_model_version(settings).lower() == "5.0pro":
-        return "1k"
+        return "1.5k"
     image_size = str(settings.get("imageSize") or "").strip().lower()
     return "4k" if image_size == "4k" else "2k"
 
@@ -4050,6 +4936,228 @@ def store_generated_image_if_needed(value):
         stale_id = GENERATED_IMAGE_ORDER.pop(0)
         GENERATED_IMAGES.pop(stale_id, None)
     return f"http://127.0.0.1:{PORT}/generated/{image_id}"
+
+
+def build_canny_composition_guide(reference_data_url):
+    if not isinstance(reference_data_url, str) or not reference_data_url.startswith("data:"):
+        raise Exception("参考图格式不正确，无法生成构图边缘稿。")
+    _, separator, encoded = reference_data_url.partition(",")
+    if not separator:
+        raise Exception("参考图 data URL 格式不正确，无法生成构图边缘稿。")
+    try:
+        raw = base64.b64decode(encoded.encode("ascii"))
+    except Exception as error:
+        raise Exception("参考图解码失败，无法生成构图边缘稿。") from error
+
+    ffmpeg_bin = shutil.which("ffmpeg")
+    ffprobe_bin = shutil.which("ffprobe")
+    if not ffmpeg_bin or not ffprobe_bin:
+        raise Exception("本地 Canny 处理需要 ffmpeg，但当前未找到可执行文件。")
+    tmp_dir = tempfile.mkdtemp(prefix="aic-canny-")
+    try:
+        source_path = os.path.join(tmp_dir, "source-image")
+        edge_path = os.path.join(tmp_dir, "composition-guide.png")
+        with open(source_path, "wb") as handle:
+            handle.write(raw)
+
+        probe = subprocess.run(
+            [
+                ffprobe_bin,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "json",
+                source_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        if probe.returncode != 0:
+            raise Exception(probe.stderr.strip() or "无法读取参考图尺寸。")
+        streams = json.loads(probe.stdout or "{}").get("streams") or []
+        if not streams:
+            raise Exception("无法读取参考图尺寸。")
+        width = int(streams[0].get("width") or 0)
+        height = int(streams[0].get("height") or 0)
+        if width <= 0 or height <= 0:
+            raise Exception("参考图尺寸无效。")
+
+        scale = min(1.0, CANNY_MAX_SIDE / max(width, height))
+        target_width = max(1, int(round(width * scale)))
+        target_height = max(1, int(round(height * scale)))
+        low = CANNY_LOW_THRESHOLD / 255.0
+        high = CANNY_HIGH_THRESHOLD / 255.0
+        video_filter = (
+            f"scale={target_width}:{target_height}:flags=lanczos,"
+            f"format=gray,edgedetect=low={low:.6f}:high={high:.6f}:mode=wires:planes=y,negate"
+        )
+        process = subprocess.run(
+            [
+                ffmpeg_bin,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                source_path,
+                "-vf",
+                video_filter,
+                "-frames:v",
+                "1",
+                edge_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=40,
+            check=False,
+        )
+        if process.returncode != 0 or not os.path.exists(edge_path):
+            raise Exception(process.stderr.strip() or "Canny 边缘稿生成失败。")
+        with open(edge_path, "rb") as handle:
+            edge_raw = handle.read()
+        return f"data:image/png;base64,{base64.b64encode(edge_raw).decode('ascii')}"
+    except Exception as error:
+        raise Exception(f"本地构图边缘稿生成失败：{error}") from error
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def first_existing_path(candidates):
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return ""
+
+
+def resolve_depth_runtime():
+    configured_python = os.environ.get("AIC_DEPTH_PYTHON", "").strip()
+    configured_model = os.environ.get("AIC_DEPTH_MODEL", "").strip()
+    python_bin = first_existing_path(
+        [
+            configured_python,
+            os.path.join(PROJECT_ROOT, "server", ".depth-runtime", "bin", "python"),
+            os.path.join(
+                PROJECT_ROOT,
+                "evaluation",
+                "depth-parameter-lab",
+                ".runtime",
+                "bin",
+                "python",
+            ),
+        ]
+    )
+    model_path = first_existing_path(
+        [
+            configured_model,
+            os.path.join(PROJECT_ROOT, "server", "models", "depth_anything_v2_vits.onnx"),
+            os.path.join(
+                PROJECT_ROOT,
+                "evaluation",
+                "depth-parameter-lab",
+                ".cache",
+                "depth_anything_v2_vits.onnx",
+            ),
+        ]
+    )
+    if not python_bin or not model_path:
+        raise Exception(
+            "本地深度图组件未安装。请配置 AIC_DEPTH_PYTHON 与 AIC_DEPTH_MODEL 后重启后端。"
+        )
+    return python_bin, model_path
+
+
+def build_depth_composition_guide(reference_data_url):
+    if not isinstance(reference_data_url, str) or not reference_data_url.startswith("data:"):
+        raise Exception("参考图格式不正确，无法生成构图深度图。")
+    _, separator, encoded = reference_data_url.partition(",")
+    if not separator:
+        raise Exception("参考图 data URL 格式不正确，无法生成构图深度图。")
+    try:
+        raw = base64.b64decode(encoded.encode("ascii"))
+    except Exception as error:
+        raise Exception("参考图解码失败，无法生成构图深度图。") from error
+
+    python_bin, model_path = resolve_depth_runtime()
+    tmp_dir = tempfile.mkdtemp(prefix="aic-depth-")
+    try:
+        source_path = os.path.join(tmp_dir, "source-image")
+        depth_path = os.path.join(tmp_dir, "composition-guide.png")
+        with open(source_path, "wb") as handle:
+            handle.write(raw)
+        process = subprocess.run(
+            [
+                python_bin,
+                DEPTH_GUIDE_SCRIPT,
+                "--model",
+                model_path,
+                "--input",
+                source_path,
+                "--output",
+                depth_path,
+                "--structure",
+                str(DEPTH_GUIDE_STRUCTURE),
+                "--detail",
+                str(DEPTH_GUIDE_DETAIL),
+                "--smoothing",
+                str(DEPTH_GUIDE_SMOOTHING),
+                "--contrast",
+                str(DEPTH_GUIDE_CONTRAST),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if process.returncode != 0 or not os.path.exists(depth_path):
+            detail = process.stderr.strip() or process.stdout.strip() or "深度图生成失败。"
+            raise Exception(detail)
+        with open(depth_path, "rb") as handle:
+            depth_raw = handle.read()
+        return f"data:image/png;base64,{base64.b64encode(depth_raw).decode('ascii')}"
+    except Exception as error:
+        raise Exception(f"本地构图深度图生成失败：{error}") from error
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def build_generation_reference_images(product_data_urls, settings):
+    references = [item for item in product_data_urls if isinstance(item, str) and item]
+    composition_guide = settings.get("compositionGuideDataUrl")
+    if not isinstance(composition_guide, str) or not composition_guide.startswith("data:"):
+        raise Exception("构图引导图未生成，无法开始生图。")
+    return references + [composition_guide]
+
+
+def build_composition_guide_rule(product_count, guide_type="canny"):
+    if product_count == 1:
+        product_scope = "参考图1是商品素材图"
+    else:
+        product_scope = f"参考图1至参考图{product_count}是用户分别上传的商品素材图"
+    guide_index = product_count + 1
+    if guide_type == "depth":
+        return (
+            f" 参考图输入顺序：{product_scope}，是商品品类、件数、结构、颜色、纹理、长度和品牌标识的唯一真值；"
+            f"参考图{guide_index}是从场景原图提取的灰度相对深度图，浅色表示更靠近镜头、深色表示更远，"
+            "只用于辅助还原前后空间层次、主体位置与占比、四边裁切、留白和主要场景体块，不是商品图，也不提供颜色、材质或人物身份。"
+            "人物动作、手势、表情、身体朝向和接触关系以最终文字 prompt 为准；用户补充要求改变动作、删除物体或更换角色时，"
+            "该文字要求优先，必须忽略深度图中与之冲突的旧人物或物体体块。"
+            "禁止把深度图的灰度、旧衣体积、原人物面貌或模糊边缘生成到最终画面中，也不得让它覆盖商品素材图的真实结构。"
+        )
+    return (
+        f" 参考图输入顺序：{product_scope}，是商品品类、件数、结构、颜色、纹理、长度和品牌标识的唯一真值；"
+        f"参考图{guide_index}是从场景原图生成的黑线白底 Canny 构图稿，只用于辅助还原画幅、主体位置与占比、"
+        "四边裁切、留白、主要道具落点和场景大结构，不是商品图，也不锁定人物姿势。"
+        "人物动作、手势、表情、身体朝向和接触关系以最终文字 prompt 为准；用户补充要求改变动作、删除物体或更换角色时，"
+        "该文字要求优先，必须忽略 Canny 构图稿中与之冲突的肢体、物体或人物轮廓。"
+        "Canny 构图稿中的白底、黑线、旧衣轮廓、面部线条、文字和残余纹理都不是最终成图内容，"
+        "禁止生成线稿效果、旧衣或原人物身份，也不得让它覆盖商品素材图的真实结构。"
+    )
 
 
 def convert_image_url_to_data_url(image_url):
@@ -4508,6 +5616,7 @@ def parse_partial_top_level_json(text):
     for key in (
         "hasFace",
         "reason",
+        "layoutLock",
         "frameLock",
         "cameraLock",
         "appearanceLock",

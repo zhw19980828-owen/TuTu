@@ -204,9 +204,9 @@ async function renderGenerationRecords() {
     return;
   }
 
-  const records = (Array.isArray(response.result) ? response.result : []).filter((record) =>
-    Boolean(record?.status || record?.resultImageDataUrl || record?.imageUrl)
-  );
+  const records = (Array.isArray(response.result) ? response.result : [])
+    .filter((record) => Boolean(record?.status || record?.resultImageDataUrl || record?.imageUrl))
+    .sort((left, right) => getRecordTimestamp(right) - getRecordTimestamp(left));
   const runningCount = records.filter((record) => record.status === "running").length;
   runningSummary.hidden = runningCount === 0;
   runningSummary.textContent = runningCount ? `${runningCount} 个任务生成中` : "";
@@ -262,6 +262,12 @@ async function renderGenerationRecords() {
             <img class="history-image" src="${escapeHtml(displayImageUrl)}" alt="生成结果" loading="lazy" />
             <div class="history-overlay">
               <div class="history-time">${formatRecordTime(record.createdAt)}</div>
+              <button class="history-download-button" type="button" data-download-record="${escapeHtml(recordId)}" aria-label="下载生成结果">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 18v2h14v-2" />
+                </svg>
+                <span>下载</span>
+              </button>
             </div>
           </div>
         </article>
@@ -270,6 +276,31 @@ async function renderGenerationRecords() {
     .join("");
 
   const recordMap = new Map(records.map((record) => [record.id || record.imageUrl || "", record]));
+  historyGrid.querySelectorAll("[data-download-record]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const record = recordMap.get(button.dataset.downloadRecord || "");
+      const imageUrl = record?.resultImageDataUrl || record?.imageUrl || "";
+      if (!imageUrl || button.disabled) {
+        return;
+      }
+      button.disabled = true;
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "download-image",
+          payload: {
+            url: imageUrl,
+            filename: `AIC-${formatDownloadTimestamp(record.createdAt)}.png`
+          }
+        });
+        if (!response?.ok) {
+          throw new Error(response?.error || "下载失败");
+        }
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
   historyGrid.querySelectorAll("[data-retry-record]").forEach((button) => {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
@@ -299,6 +330,19 @@ async function renderGenerationRecords() {
       }
     });
   });
+}
+
+function getRecordTimestamp(record) {
+  const value = record?.createdAt;
+  const timestamp = typeof value === "number" ? value : Date.parse(value || "");
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function formatDownloadTimestamp(value) {
+  const timestamp = typeof value === "number" ? value : Date.parse(value || "");
+  const date = new Date(Number.isFinite(timestamp) ? timestamp : Date.now());
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
 function renderLightboxThumb(label, imageUrl, alt) {

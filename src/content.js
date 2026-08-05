@@ -12,8 +12,10 @@
     generatedImageUrl: "",
     analysisPrompt: "",
     imageRequestDebug: null,
+    productImages: [],
     productImageDataUrl: "",
     productFileName: "",
+    pendingProductReplaceIndex: -1,
     generationPath: "apparel",
     generationPathSource: "memory",
     imageModel: "dreamina/image2image:5.0Pro",
@@ -75,6 +77,7 @@
     const button = document.createElement("button");
     button.className = "xhs-replicator-trigger";
     button.type = "button";
+    button.setAttribute("aria-label", "AIC");
     button.innerHTML = `
       <span class="xhs-replicator-trigger-icon" aria-hidden="true">
         <svg viewBox="0 0 16 16" focusable="false">
@@ -82,7 +85,7 @@
           <path d="M12.4 9.5 13 11l1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6.6-1.5Z"></path>
         </svg>
       </span>
-      <span>AI复刻</span>
+      <span>AIC</span>
     `;
     button.addEventListener("mouseenter", () => {
       state.pointerOnTrigger = true;
@@ -138,20 +141,13 @@
             <div class="xhs-replicator-form-card" data-role="form-view">
               <div class="xhs-replicator-hero">
                 <div class="xhs-replicator-row xhs-replicator-asset-row">
-                  <input id="xhs-replicator-product" class="xhs-replicator-product-input" type="file" accept="image/*" />
+                  <input id="xhs-replicator-product" class="xhs-replicator-product-input" type="file" accept="image/*" multiple />
                   <div class="xhs-replicator-upload-card" data-role="upload-card" tabindex="0">
                     <div class="xhs-replicator-upload-plus">添加商品素材</div>
                   </div>
-                  <div class="xhs-replicator-product-chip" data-role="product-chip" tabindex="0" aria-label="替换商品素材" hidden>
-                    <span class="xhs-replicator-product-card-layer is-left" aria-hidden="true"></span>
-                    <span class="xhs-replicator-product-card-layer is-right" aria-hidden="true"></span>
-                    <div class="xhs-replicator-product-card-front">
-                      <img class="xhs-replicator-product-thumb" data-role="product-thumb" alt="商品缩略图" />
-                    </div>
-                    <div class="xhs-replicator-product-actions">
-                      <button class="xhs-replicator-inline-action" type="button" data-role="replace-product">替换</button>
-                      <button class="xhs-replicator-inline-action" type="button" data-role="remove-product">删除</button>
-                    </div>
+                  <div class="xhs-replicator-product-chip" data-role="product-chip" aria-label="已添加的商品素材" hidden>
+                    <div class="xhs-replicator-product-list" data-role="product-list"></div>
+                    <button class="xhs-replicator-product-add" type="button" data-role="add-product" aria-label="继续添加商品素材">+</button>
                   </div>
                 </div>
               </div>
@@ -249,7 +245,8 @@
     const productInput = mask.querySelector("#xhs-replicator-product");
     const uploadCard = mask.querySelector('[data-role="upload-card"]');
     const productChip = mask.querySelector('[data-role="product-chip"]');
-    const productThumb = mask.querySelector('[data-role="product-thumb"]');
+    const productList = mask.querySelector('[data-role="product-list"]');
+    const addProductButton = mask.querySelector('[data-role="add-product"]');
     const pathButtons = Array.from(mask.querySelectorAll(".xhs-replicator-path-chip"));
     const kindTrigger = mask.querySelector('[data-role="kind-trigger"]');
     const kindLabel = mask.querySelector('[data-role="kind-label"]');
@@ -278,8 +275,6 @@
     const resultBack = mask.querySelector('[data-role="result-back"]');
     const backgroundRunButton = mask.querySelector('[data-role="background-run"]');
     const taskTitle = mask.querySelector('[data-role="task-title"]');
-    const replaceProductButton = mask.querySelector('[data-role="replace-product"]');
-    const removeProductButton = mask.querySelector('[data-role="remove-product"]');
 
     const closeKindPicker = () => {
       kindPopover.hidden = true;
@@ -430,72 +425,66 @@
     });
 
     uploadCard.addEventListener("click", () => {
-      productInput.click();
+      openProductPicker(productInput);
     });
     uploadCard.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        productInput.click();
+        openProductPicker(productInput);
       }
     });
-    replaceProductButton.addEventListener("click", () => {
-      productInput.click();
-    });
+    addProductButton.addEventListener("click", () => openProductPicker(productInput));
     productChip.addEventListener("click", (event) => {
-      if (!event.target.closest("button")) {
-        productInput.click();
+      const actionButton = event.target.closest("[data-product-action]");
+      if (!actionButton) {
+        return;
       }
-    });
-    productChip.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        productInput.click();
+      const index = Number(actionButton.dataset.productIndex);
+      if (!Number.isInteger(index) || index < 0 || index >= state.productImages.length) {
+        return;
       }
-    });
-    removeProductButton.addEventListener("click", () => {
-      clearProductSelection({
-        productInput,
-        productThumb,
-        uploadCard,
-        productChip,
-        modalWindow
-      });
-      setGenerationPath(pathButtons, state.generationPath || "apparel", state.generationPathSource || "memory");
+      if (actionButton.dataset.productAction === "replace") {
+        openProductPicker(productInput, index);
+        return;
+      }
+      if (actionButton.dataset.productAction === "remove") {
+        state.productImages.splice(index, 1);
+        syncLegacyProductState();
+        renderProductSelection({ productList, uploadCard, productChip, modalWindow });
+      }
     });
 
     productInput.addEventListener("change", async () => {
-      const file = productInput.files?.[0];
-      if (!file) {
-        clearProductSelection({
-          productInput,
-          productThumb,
-          uploadCard,
-          productChip,
-          modalWindow
-        });
-        setGenerationPath(pathButtons, state.generationPath || "apparel", state.generationPathSource || "memory");
+      const files = Array.from(productInput.files || []);
+      if (!files.length) {
+        state.pendingProductReplaceIndex = -1;
         return;
       }
 
       try {
         state.classificationJobId += 1;
-        state.productImageDataUrl = await readFileAsDataUrl(file);
-        state.productFileName = file.name;
-        productThumb.src = state.productImageDataUrl;
-        uploadCard.hidden = true;
-        productChip.hidden = false;
-        modalWindow.dataset.hasProduct = "true";
+        const nextImages = await Promise.all(
+          files.map(async (file) => ({
+            dataUrl: await readFileAsDataUrl(file),
+            fileName: file.name
+          }))
+        );
+        const replaceIndex = state.pendingProductReplaceIndex;
+        if (replaceIndex >= 0 && replaceIndex < state.productImages.length) {
+          state.productImages.splice(replaceIndex, 1, ...nextImages);
+        } else {
+          state.productImages.push(...nextImages);
+        }
+        state.pendingProductReplaceIndex = -1;
+        syncLegacyProductState();
+        renderProductSelection({ productList, uploadCard, productChip, modalWindow });
         setGenerationPath(pathButtons, state.generationPath || "apparel", state.generationPathSource || "memory");
         formStatus.textContent = "";
       } catch (error) {
-        clearProductSelection({
-          productInput,
-          productThumb,
-          uploadCard,
-          productChip,
-          modalWindow
-        });
+        state.pendingProductReplaceIndex = -1;
         formStatus.textContent = `商品图片读取失败：${error instanceof Error ? error.message : String(error)}`;
+      } finally {
+        productInput.value = "";
       }
     });
 
@@ -599,10 +588,27 @@
           imageModel: payload.imageModelOverride,
           imageSize: payload.referenceAspectRatio
         });
-        const processedProduct = await prepareProductImageForGeneration(
-          payload.originalProductImageDataUrl,
-          payload.generationPath,
-          payload.faceIdentityMode === "regenerate"
+        const originalProductImages = Array.isArray(payload.originalProductImages)
+          ? payload.originalProductImages.filter((item) => item?.dataUrl)
+          : [];
+        if (!originalProductImages.length && payload.originalProductImageDataUrl) {
+          originalProductImages.push({
+            dataUrl: payload.originalProductImageDataUrl,
+            fileName: payload.productFileName || ""
+          });
+        }
+        const processedProducts = await Promise.all(
+          originalProductImages.map(async (item) => {
+            const processed = await prepareProductImageForGeneration(
+              item.dataUrl,
+              payload.generationPath,
+              payload.faceIdentityMode === "regenerate"
+            );
+            return {
+              ...item,
+              dataUrl: processed.dataUrl
+            };
+          })
         );
         const productThumbDataUrl = await createHistoryThumbnail(payload.originalProductImageDataUrl);
         await saveGenerationRecord({
@@ -611,7 +617,10 @@
         });
         const response = await replicateImageDirectly({
           ...payload,
-          productImageDataUrl: processedProduct.dataUrl,
+          productImageDataUrls: processedProducts.map((item) => item.dataUrl),
+          productImageDataUrl: processedProducts[0]?.dataUrl || "",
+          productFileNames: processedProducts.map((item) => item.fileName || ""),
+          productFileName: processedProducts[0]?.fileName || "",
           progressId: task.progressId
         });
         if (!response?.ok) {
@@ -669,7 +678,7 @@
         formStatus.textContent = "没有拿到参考图地址，请重新 hover 一次图片。";
         return;
       }
-      if (!state.productImageDataUrl) {
+      if (!state.productImages.length) {
         formStatus.textContent = "请先上传你自己的商品图片。";
         return;
       }
@@ -692,10 +701,13 @@
         error: "",
         pollTimer: null
       };
+      const originalProductImages = state.productImages.map((item) => ({ ...item }));
       const payload = {
         imageUrl: state.currentImageUrl,
-        originalProductImageDataUrl: state.productImageDataUrl,
-        productFileName: state.productFileName,
+        originalProductImages,
+        originalProductImageDataUrl: originalProductImages[0]?.dataUrl || "",
+        productFileNames: originalProductImages.map((item) => item.fileName),
+        productFileName: originalProductImages[0]?.fileName || "",
         productSubjectHint: "",
         generationPath: state.generationPath,
         faceIdentityMode: state.faceIdentityMode,
@@ -719,7 +731,7 @@
       productInput,
       uploadCard,
       productChip,
-      productThumb,
+      productList,
       pathButtons,
       notesInput,
       facePolicy,
@@ -751,15 +763,17 @@
     modal.formStatus.textContent = "";
     showFormView(modal.formView, modal.taskView);
     stopProgress(modal.progressWrap, modal.progressLabel);
-    if (state.productImageDataUrl) {
-      modal.productThumb.src = state.productImageDataUrl;
-      modal.uploadCard.hidden = true;
-      modal.productChip.hidden = false;
-      modal.modalWindow.dataset.hasProduct = "true";
+    if (state.productImages.length) {
+      renderProductSelection({
+        productList: modal.productList,
+        uploadCard: modal.uploadCard,
+        productChip: modal.productChip,
+        modalWindow: modal.modalWindow
+      });
     } else {
       clearProductSelection({
         productInput: modal.productInput,
-        productThumb: modal.productThumb,
+        productList: modal.productList,
         uploadCard: modal.uploadCard,
         productChip: modal.productChip,
         modalWindow: modal.modalWindow
@@ -923,16 +937,70 @@
     trigger.style.display = "none";
   }
 
-  function clearProductSelection({ productInput, productThumb, uploadCard, productChip, modalWindow }) {
+  function openProductPicker(productInput, replaceIndex = -1) {
+    state.pendingProductReplaceIndex = replaceIndex;
+    productInput.value = "";
+    productInput.click();
+  }
+
+  function syncLegacyProductState() {
+    state.productImageDataUrl = state.productImages[0]?.dataUrl || "";
+    state.productFileName = state.productImages[0]?.fileName || "";
+  }
+
+  function renderProductSelection({ productList, uploadCard, productChip, modalWindow }) {
+    if (productList) {
+      productList.replaceChildren();
+      state.productImages.forEach((item, index) => {
+        const card = document.createElement("article");
+        card.className = "xhs-replicator-product-card";
+
+        const image = document.createElement("img");
+        image.className = "xhs-replicator-product-thumb";
+        image.src = item.dataUrl;
+        image.alt = `商品素材 ${index + 1}`;
+
+        const removeButton = document.createElement("button");
+        removeButton.className = "xhs-replicator-product-remove";
+        removeButton.type = "button";
+        removeButton.dataset.productAction = "remove";
+        removeButton.dataset.productIndex = String(index);
+        removeButton.setAttribute("aria-label", `删除商品素材 ${index + 1}`);
+        removeButton.textContent = "×";
+
+        card.append(image, removeButton);
+        productList.appendChild(card);
+      });
+    }
+
+    const hasProduct = state.productImages.length > 0;
+    if (uploadCard) {
+      uploadCard.hidden = hasProduct;
+    }
+    if (productChip) {
+      productChip.hidden = !hasProduct;
+    }
+    if (modalWindow) {
+      if (hasProduct) {
+        modalWindow.dataset.hasProduct = "true";
+      } else {
+        delete modalWindow.dataset.hasProduct;
+      }
+    }
+  }
+
+  function clearProductSelection({ productInput, productList, uploadCard, productChip, modalWindow }) {
     state.classificationJobId += 1;
+    state.productImages = [];
     state.productImageDataUrl = "";
     state.productFileName = "";
+    state.pendingProductReplaceIndex = -1;
     state.classificationPending = false;
     if (productInput) {
       productInput.value = "";
     }
-    if (productThumb) {
-      productThumb.removeAttribute("src");
+    if (productList) {
+      productList.replaceChildren();
     }
     if (uploadCard) {
       uploadCard.hidden = false;
@@ -1466,7 +1534,11 @@
     const imageResolution = normalizeImageResolution(settings.imageResolution);
     const requestBody = {
       imageUrl: payload.imageUrl,
+      productImageDataUrls: Array.isArray(payload.productImageDataUrls)
+        ? payload.productImageDataUrls
+        : [],
       productImageDataUrl: payload.productImageDataUrl,
+      productFileNames: Array.isArray(payload.productFileNames) ? payload.productFileNames : [],
       productFileName: payload.productFileName || "",
       productSubjectHint: payload.productSubjectHint || "",
       generationPath: payload.generationPath || "",
